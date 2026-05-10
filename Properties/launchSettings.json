@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "hanabimanga (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "hanabimanga (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
