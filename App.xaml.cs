@@ -1,4 +1,6 @@
-﻿using Microsoft.UI.Xaml;
+﻿using hanabimanga.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
@@ -41,10 +43,44 @@ namespace hanabimanga
         /// Invoked when the application is launched.
         /// </summary>
         /// <param name="args">Details about the launch request and process.</param>
-        protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+        public static IConfiguration Configuration { get; private set; } = null!;
+
+        protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
+            Configuration = BuildConfiguration();
+
+            var url = Configuration["Supabase:Url"];
+            var anonKey = Configuration["Supabase:AnonKey"];
+
+            if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(anonKey))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "Supabase 配置缺失:请检查 appsettings.local.json 或环境变量 Supabase__Url / Supabase__AnonKey。");
+            }
+            else
+            {
+                try
+                {
+                    await SupabaseService.Instance.InitializeAsync(url, anonKey);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Supabase 初始化失败: {ex}");
+                }
+            }
+
             _window = new MainWindow();
             _window.Activate();
+        }
+
+        private static IConfiguration BuildConfiguration()
+        {
+            return new ConfigurationBuilder()
+                .SetBasePath(AppContext.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+                .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: false)
+                .AddEnvironmentVariables()
+                .Build();
         }
     }
 }
