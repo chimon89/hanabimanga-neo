@@ -63,5 +63,18 @@ namespace hanabimanga.Pages
         {
             ViewModel.ShowNextRecommendations();
         }
+
+        private void ComicItem_Click(object sender, RoutedEventArgs e)
+        {
+            var comicId = (sender as FrameworkElement)?.Tag as string;
+            if (string.IsNullOrWhiteSpace(comicId))
+            {
+                System.Diagnostics.Debug.WriteLine("[home] comic item click ignored: empty item id");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[home] navigate comic detail: {comicId}");
+            Frame.Navigate(typeof(ComicDetailPage), comicId);
+        }
     }
 }

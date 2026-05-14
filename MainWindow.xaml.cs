@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -26,6 +27,8 @@ namespace hanabimanga
         private static readonly string[] AvatarAssetExtensions = [".webp", ".png", ".jpg", ".jpeg"];
 
         private AppWindow? _appWindow;
+        private ComicDetailPage? _currentDetailPage;
+        private ComicReaderPage? _currentReaderPage;
         private int _accountRefreshVersion;
 
         private enum AuthDialogMode
@@ -38,6 +41,7 @@ namespace hanabimanga
         {
             InitializeComponent();
             UseGalleryStyleWindowFrame();
+            RootFrame.Navigated += RootFrame_Navigated;
             NavigationRoot.SelectedItem = HomeNavigationItem;
             RootFrame.Navigate(typeof(HomePage));
             UpdateAccountFooter();
@@ -84,32 +88,33 @@ namespace hanabimanga
             RightPaddingColumn.Width = new GridLength(_appWindow.TitleBar.RightInset / scaleAdjustment);
 
             var nonClientInputSource = InputNonClientPointerSource.GetForWindowId(_appWindow.Id);
-            if (TitleBarSearchBox.ActualWidth < 1 || TitleBarSearchBox.ActualHeight < 1)
+            var passthroughRects = new List<RectInt32>();
+
+            AddPassthroughRegion(passthroughRects, PaneToggleButton, scaleAdjustment);
+            AddPassthroughRegion(passthroughRects, TitleBarSearchBox, scaleAdjustment);
+            AddPassthroughRegion(passthroughRects, DetailTitleBarBackButton, scaleAdjustment);
+            AddPassthroughRegion(passthroughRects, DetailTitleBarHomeButton, scaleAdjustment);
+
+            nonClientInputSource.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects.ToArray());
+        }
+
+        private static void AddPassthroughRegion(
+            List<RectInt32> passthroughRects,
+            FrameworkElement element,
+            double scale)
+        {
+            if (element.Visibility != Visibility.Visible ||
+                element.ActualWidth < 1 ||
+                element.ActualHeight < 1)
             {
-                nonClientInputSource.SetRegionRects(NonClientRegionKind.Passthrough, Array.Empty<RectInt32>());
                 return;
             }
 
-            var searchTransform = TitleBarSearchBox.TransformToVisual(null);
-            var searchBounds = searchTransform.TransformBounds(
-                new Rect(0, 0, TitleBarSearchBox.ActualWidth, TitleBarSearchBox.ActualHeight));
-
-            if (searchBounds.Width < 1 || searchBounds.Height < 1) return;
-
-            var passthroughRects = new[]
-            {
-                GetPassthroughRect(PaneToggleButton, scaleAdjustment),
-                ToRectInt32(searchBounds, scaleAdjustment),
-            };
-
-            nonClientInputSource.SetRegionRects(NonClientRegionKind.Passthrough, passthroughRects);
-        }
-
-        private static RectInt32 GetPassthroughRect(FrameworkElement element, double scale)
-        {
             var transform = element.TransformToVisual(null);
             var bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
-            return ToRectInt32(bounds, scale);
+            if (bounds.Width < 1 || bounds.Height < 1) return;
+
+            passthroughRects.Add(ToRectInt32(bounds, scale));
         }
 
         private static RectInt32 ToRectInt32(Rect bounds, double scale)
@@ -119,6 +124,120 @@ namespace hanabimanga
                 _Y: (int)Math.Round(bounds.Y * scale),
                 _Width: (int)Math.Round(bounds.Width * scale),
                 _Height: (int)Math.Round(bounds.Height * scale));
+        }
+
+        private void RootFrame_Navigated(object sender, Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+        {
+            if (_currentDetailPage != null)
+            {
+                _currentDetailPage.TitleBarInfoChanged -= DetailPage_TitleBarInfoChanged;
+                _currentDetailPage = null;
+            }
+            if (_currentReaderPage != null)
+            {
+                _currentReaderPage.TitleBarInfoChanged -= ReaderPage_TitleBarInfoChanged;
+                _currentReaderPage = null;
+            }
+
+            if (RootFrame.Content is ComicDetailPage detailPage)
+            {
+                _currentDetailPage = detailPage;
+                _currentDetailPage.TitleBarInfoChanged += DetailPage_TitleBarInfoChanged;
+                ShowDetailTitleBar(detailPage);
+            }
+            else if (RootFrame.Content is ComicReaderPage readerPage)
+            {
+                _currentReaderPage = readerPage;
+                _currentReaderPage.TitleBarInfoChanged += ReaderPage_TitleBarInfoChanged;
+                ShowReaderTitleBar(readerPage);
+            }
+            else
+            {
+                ShowDefaultTitleBar();
+                if (RootFrame.Content is HomePage)
+                {
+                    NavigationRoot.SelectedItem = HomeNavigationItem;
+                }
+            }
+        }
+
+        private void ReaderPage_TitleBarInfoChanged(object? sender, EventArgs e)
+        {
+            if (sender is ComicReaderPage readerPage)
+            {
+                ShowReaderTitleBar(readerPage);
+            }
+        }
+
+        private void DetailPage_TitleBarInfoChanged(object? sender, EventArgs e)
+        {
+            if (sender is ComicDetailPage detailPage)
+            {
+                ShowDetailTitleBar(detailPage);
+            }
+        }
+
+        private void ShowDefaultTitleBar()
+        {
+            TitleBarLogoImage.Visibility = Visibility.Visible;
+            TitleBarAppNameTextBlock.Visibility = Visibility.Visible;
+            TitleBarSearchBox.Visibility = Visibility.Visible;
+            DetailTitleBarBreadcrumb.Visibility = Visibility.Collapsed;
+            AppTitleBar.UpdateLayout();
+            UpdateTitleBarInteractiveRegions();
+        }
+
+        private void ShowDetailTitleBar(ComicDetailPage detailPage)
+        {
+            TitleBarLogoImage.Visibility = Visibility.Collapsed;
+            TitleBarAppNameTextBlock.Visibility = Visibility.Collapsed;
+            TitleBarSearchBox.Visibility = Visibility.Collapsed;
+            DetailTitleBarBreadcrumb.Visibility = Visibility.Visible;
+
+            DetailTitleBarCategoryTextBlock.Text = detailPage.TitleBarCategory;
+            DetailTitleBarTitleTextBlock.Text = detailPage.TitleBarTitle;
+            AppTitleBar.UpdateLayout();
+            UpdateTitleBarInteractiveRegions();
+        }
+
+        private void ShowReaderTitleBar(ComicReaderPage readerPage)
+        {
+            TitleBarLogoImage.Visibility = Visibility.Collapsed;
+            TitleBarAppNameTextBlock.Visibility = Visibility.Collapsed;
+            TitleBarSearchBox.Visibility = Visibility.Collapsed;
+            DetailTitleBarBreadcrumb.Visibility = Visibility.Visible;
+
+            DetailTitleBarCategoryTextBlock.Text = readerPage.TitleBarCategory;
+            DetailTitleBarTitleTextBlock.Text = readerPage.TitleBarTitle;
+            AppTitleBar.UpdateLayout();
+            UpdateTitleBarInteractiveRegions();
+        }
+
+        private void DetailTitleBarBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (RootFrame.CanGoBack)
+            {
+                RootFrame.GoBack();
+                return;
+            }
+
+            NavigateHomeFromTitleBar();
+        }
+
+        private void DetailTitleBarHomeButton_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateHomeFromTitleBar();
+        }
+
+        private void NavigateHomeFromTitleBar()
+        {
+            if (RootFrame.Content is not HomePage)
+            {
+                RootFrame.Navigate(typeof(HomePage));
+            }
+
+            RootFrame.BackStack.Clear();
+            NavigationRoot.SelectedItem = HomeNavigationItem;
         }
 
         private void PaneToggleButton_Click(object sender, RoutedEventArgs e)

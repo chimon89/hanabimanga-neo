@@ -53,6 +53,7 @@
             </Button>
 
             <Image
+                x:Name="TitleBarLogoImage"
                 Grid.Column="2"
                 Source="ms-appx:///Assets/logo.png"
                 Width="20"
@@ -61,6 +62,7 @@
                 VerticalAlignment="Center"
                 IsHitTestVisible="False" />
             <TextBlock
+                x:Name="TitleBarAppNameTextBlock"
                 Grid.Column="3"
                 Text="花火漫画"
                 VerticalAlignment="Center"
@@ -68,6 +70,62 @@
                 Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                 IsHitTestVisible="False"
                 TextTrimming="CharacterEllipsis" />
+
+            <StackPanel
+                x:Name="DetailTitleBarBreadcrumb"
+                Grid.Column="2"
+                Grid.ColumnSpan="5"
+                Margin="8,0,24,0"
+                Orientation="Horizontal"
+                Spacing="8"
+                VerticalAlignment="Center"
+                Visibility="Collapsed">
+                <Button
+                    x:Name="DetailTitleBarBackButton"
+                    Width="34"
+                    Height="34"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="DetailTitleBarBackButton_Click"
+                    ToolTipService.ToolTip="返回">
+                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                </Button>
+                <Button
+                    x:Name="DetailTitleBarHomeButton"
+                    MinHeight="34"
+                    Padding="8,4"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="DetailTitleBarHomeButton_Click">
+                    <TextBlock Text="首页" />
+                </Button>
+                <FontIcon
+                    Glyph="&#xE76C;"
+                    FontSize="10"
+                    Opacity="0.68"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    x:Name="DetailTitleBarCategoryTextBlock"
+                    Text="漫画"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    MaxLines="1"
+                    TextTrimming="CharacterEllipsis" />
+                <FontIcon
+                    Glyph="&#xE76C;"
+                    FontSize="10"
+                    Opacity="0.68"
+                    VerticalAlignment="Center" />
+                <TextBlock
+                    x:Name="DetailTitleBarTitleTextBlock"
+                    Text="漫画详情"
+                    VerticalAlignment="Center"
+                    FontWeight="SemiBold"
+                    MaxWidth="620"
+                    MaxLines="1"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
 
             <AutoSuggestBox
                 x:Name="TitleBarSearchBox"

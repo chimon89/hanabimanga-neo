@@ -61,7 +61,17 @@ namespace hanabimanga
             {
                 try
                 {
-                    await SupabaseService.Instance.InitializeAsync(url, anonKey);
+                    await SupabaseService.Instance.InitializeAsync(
+                        url,
+                        anonKey,
+                        readerClientVerifySecret: GetConfigurationValue(
+                            "Reader:AppClientVerifySecret",
+                            "Reader:ClientVerifySecret",
+                            "APP_CLIENT_VERIFY_SECRET"),
+                        readerClientFingerprint: GetConfigurationValue(
+                            "Reader:ClientFingerprint",
+                            "Reader:AllowedSignSha256",
+                            "APP_ALLOWED_SIGN_SHA256"));
                 }
                 catch (Exception ex)
                 {
@@ -81,6 +91,20 @@ namespace hanabimanga
                 .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: false)
                 .AddEnvironmentVariables()
                 .Build();
+        }
+
+        private static string? GetConfigurationValue(params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                var value = Configuration[key];
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return null;
         }
     }
 }
