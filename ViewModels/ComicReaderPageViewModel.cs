@@ -19,11 +19,13 @@ namespace hanabimanga.ViewModels
     public sealed class ComicReaderPageViewModel : INotifyPropertyChanged
     {
         private ComicReaderDocument? _document;
+        private ComicReaderNavigationParameter? _lastParameter;
         private bool _isLoading;
         private bool _hasRenderedFirstImage;
         private string? _errorMessage;
         private int _currentPage = 1;
         private ReaderViewMode _viewMode = ReaderViewMode.Page;
+        private bool _useUpscaled;
 
         public ObservableCollection<ReaderPageImage> Pages { get; } = new();
 
@@ -39,6 +41,7 @@ namespace hanabimanga.ViewModels
                 _isLoading = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsBusy));
+                OnPropertyChanged(nameof(CanToggleUpscaled));
             }
         }
 
@@ -111,7 +114,54 @@ namespace hanabimanga.ViewModels
         public ReaderPageImage? CurrentPageImage => Pages.ElementAtOrDefault(CurrentPage - 1);
         public string CurrentPageUrl => CurrentPageImage?.Url ?? "";
 
+        // AI 超分(高清)相关
+        public bool UseUpscaled
+        {
+            get => _useUpscaled;
+            private set
+            {
+                if (_useUpscaled == value) return;
+                _useUpscaled = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool HasUpscaledAvailable => _document?.HasUpscaled == true;
+        public bool IsUpscaledLoaded => _document?.IsUpscaled == true;
+        public bool CanToggleUpscaled => !IsLoading && HasUpscaledAvailable;
+        public bool ShowUpscaledQuota => _document?.Quota is { IsVip: false };
+        public string UpscaledQuotaText => _document?.Quota is { IsVip: false } q
+            ? $"AI 超分今日剩余 {q.Remaining}/{q.DailyLimit}"
+            : "";
+
         public async Task LoadAsync(ComicReaderNavigationParameter? parameter)
+        {
+            _lastParameter = parameter;
+            await LoadCoreAsync(parameter, _useUpscaled);
+        }
+
+        public async Task SetUpscaledAsync(bool useUpscaled)
+        {
+            if (IsLoading) return;
+            if (_useUpscaled == useUpscaled) return;
+
+            // 提前更新以让 UI 即时反馈(若失败会还原)
+            UseUpscaled = useUpscaled;
+            await LoadCoreAsync(_lastParameter, useUpscaled);
+
+            // 服务端可能因为漫画无超分而强制回退;以实际加载的资源为准
+            if (_document != null && _document.IsUpscaled != useUpscaled)
+            {
+                UseUpscaled = _document.IsUpscaled;
+            }
+            else if (HasError)
+            {
+                // 失败时回滚 toggle
+                UseUpscaled = !useUpscaled;
+            }
+        }
+
+        private async Task LoadCoreAsync(ComicReaderNavigationParameter? parameter, bool useUpscaled)
         {
             if (IsLoading) return;
 
@@ -139,7 +189,8 @@ namespace hanabimanga.ViewModels
             {
                 _document = await SupabaseService.Instance.GetComicReaderAsync(
                     parameter.ComicId,
-                    parameter.ChapterId);
+                    parameter.ChapterId,
+                    useUpscaled);
 
                 foreach (var page in _document.Pages)
                 {
@@ -201,6 +252,10 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(ShowPageContent));
             OnPropertyChanged(nameof(ShowWaterfallContent));
             OnPropertyChanged(nameof(IsBusy));
+            OnPropertyChanged(nameof(HasUpscaledAvailable));
+            OnPropertyChanged(nameof(IsUpscaledLoaded));
+            OnPropertyChanged(nameof(ShowUpscaledQuota));
+            OnPropertyChanged(nameof(UpscaledQuotaText));
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

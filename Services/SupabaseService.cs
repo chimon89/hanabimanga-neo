@@ -189,7 +189,10 @@ namespace hanabimanga.Services
             };
         }
 
-        public async Task<ComicReaderDocument> GetComicReaderAsync(long comicId, long chapterId)
+        public async Task<ComicReaderDocument> GetComicReaderAsync(
+            long comicId,
+            long chapterId,
+            bool useUpscaled = false)
         {
             var comic = await GetComicRecordByIdAsync(comicId)
                 ?? throw new InvalidOperationException("没有找到这部漫画。");
@@ -224,11 +227,17 @@ namespace hanabimanga.Services
                 throw new InvalidOperationException("这个章节暂无图片。");
             }
 
+            // 漫画未提供超分版本时,即使用户要求 vip 也回退到 sd
+            var hasUpscaled = comic.HasUpscaled;
+            var effectiveUpscaled = useUpscaled && hasUpscaled;
+
             var imageResponse = await InvokeReaderImageUrlAsync(
                 comicId,
                 chapterId,
                 selectedChapter.ImageCount,
-                selectedChapter.ImageFormat);
+                selectedChapter.ImageFormat,
+                effectiveUpscaled);
+
             var pageImages = imageResponse.Urls?
                 .Where(item => !string.IsNullOrWhiteSpace(item.Url))
                 .Select(item => new ReaderPageImage
@@ -249,6 +258,17 @@ namespace hanabimanga.Services
                 NextChapter = chapterIndex < chapters.Count - 1 ? chapters[chapterIndex + 1] : null,
                 Pages = pageImages,
                 PlatformRouted = imageResponse.Metadata?.PlatformRouted ?? "",
+                HasUpscaled = hasUpscaled,
+                IsUpscaled = effectiveUpscaled,
+                Quota = imageResponse.Quota is { } quota
+                    ? new ImageQuota
+                    {
+                        UsedToday = quota.UsedToday,
+                        Remaining = quota.Remaining,
+                        DailyLimit = quota.DailyLimit,
+                        IsVip = quota.IsVip,
+                    }
+                    : null,
             };
         }
 
@@ -341,11 +361,20 @@ namespace hanabimanga.Services
             long comicId,
             long chapterId,
             int imageCount,
-            string? imageFormat)
+            string? imageFormat,
+            bool useUpscaled)
         {
             if (string.IsNullOrWhiteSpace(_supabaseUrl) || string.IsNullOrWhiteSpace(_supabaseAnonKey))
             {
                 throw new InvalidOperationException("SupabaseService 尚未初始化,无法读取章节图片。");
+            }
+
+            var functionName = useUpscaled ? "vip-image-url" : "sd-image-url";
+
+            // vip-image-url 必须登录
+            if (useUpscaled && string.IsNullOrWhiteSpace(CurrentSession?.AccessToken))
+            {
+                throw new InvalidOperationException("AI 超分需要登录后才能使用。");
             }
 
             var pages = BuildReaderPageLabels(imageCount);
@@ -362,17 +391,62 @@ namespace hanabimanga.Services
             };
 
             var token = CurrentSession?.AccessToken ?? _supabaseAnonKey;
-            var responseBody = await Client.Functions.Invoke(
-                "sd-image-url",
-                token,
-                new Supabase.Functions.Client.InvokeFunctionOptions
+            string responseBody;
+            try
+            {
+                responseBody = await Client.Functions.Invoke(
+                    functionName,
+                    token,
+                    new Supabase.Functions.Client.InvokeFunctionOptions
+                    {
+                        Body = body,
+                    });
+            }
+            catch (Supabase.Functions.Exceptions.FunctionsException ex)
+            {
+                // 429 时把 body 解出来,翻译成更友好的错误
+                var bodyText = ex.Content ?? "";
+                Debug.WriteLine($"[reader] {functionName} exception: {ex.Message}; body={bodyText}");
+
+                if (TryParseReaderError(bodyText, out var errorCode))
                 {
-                    Body = body,
-                });
-            Debug.WriteLine($"[reader] sd-image-url\n{responseBody}");
+                    throw errorCode switch
+                    {
+                        "FREE_QUOTA_EXCEEDED" => new InvalidOperationException(
+                            "今日 AI 超分的免费额度已经用完,开通 VIP 可以无限制阅读高清资源。"),
+                        "ANON_QUOTA_EXCEEDED" => new InvalidOperationException(
+                            "匿名阅读次数已用完,登录后即可继续阅读。"),
+                        _ => new InvalidOperationException(bodyText),
+                    };
+                }
+                throw;
+            }
+            Debug.WriteLine($"[reader] {functionName}\n{responseBody}");
 
             return JsonConvert.DeserializeObject<RawReaderImageResponse>(responseBody)
                 ?? new RawReaderImageResponse();
+        }
+
+        private static bool TryParseReaderError(string bodyText, out string errorCode)
+        {
+            errorCode = "";
+            if (string.IsNullOrWhiteSpace(bodyText)) return false;
+
+            try
+            {
+                var parsed = JsonConvert.DeserializeObject<RawReaderImageResponse>(bodyText);
+                if (!string.IsNullOrWhiteSpace(parsed?.Error))
+                {
+                    errorCode = parsed!.Error!;
+                    return true;
+                }
+            }
+            catch
+            {
+                // body 不是 JSON 就吞掉
+            }
+
+            return false;
         }
 
         private string BuildReaderSignature(

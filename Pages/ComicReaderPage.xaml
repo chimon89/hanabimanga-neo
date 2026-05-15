@@ -79,6 +79,26 @@
                     Grid.Column="2"
                     Orientation="Horizontal"
                     Spacing="8">
+                    <ToggleButton
+                        x:Name="UpscaledToggleButton"
+                        MinHeight="34"
+                        Padding="10,6"
+                        IsChecked="{x:Bind ViewModel.IsUpscaledLoaded, Mode=OneWay}"
+                        IsEnabled="{x:Bind ViewModel.CanToggleUpscaled, Mode=OneWay}"
+                        Click="UpscaledToggleButton_Click"
+                        Visibility="{x:Bind ViewModel.HasUpscaledAvailable, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+                        ToolTipService.ToolTip="AI 超分(高清)">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE945;" FontSize="12" />
+                            <TextBlock Text="AI 超分" />
+                        </StackPanel>
+                    </ToggleButton>
+                    <TextBlock
+                        Text="{x:Bind ViewModel.UpscaledQuotaText, Mode=OneWay}"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Visibility="{x:Bind ViewModel.ShowUpscaledQuota, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
                     <Button
                         MinHeight="34"
                         Padding="10,6"

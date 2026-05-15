@@ -3,6 +3,7 @@ using hanabimanga.Models;
 using hanabimanga.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -71,6 +72,24 @@ namespace hanabimanga.Pages
         private void ScrollTopButton_Click(object sender, RoutedEventArgs e)
         {
             ReaderScrollViewer.ChangeView(null, 0, null);
+        }
+
+        private async void UpscaledToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not ToggleButton toggle) return;
+
+            // ToggleButton 内部已先翻转,IsChecked 表示用户期望的新状态
+            var target = toggle.IsChecked == true;
+            await ViewModel.SetUpscaledAsync(target);
+
+            // 失败或被服务端回退时,IsUpscaledLoaded 与 target 不一致,
+            // 把按钮 IsChecked 同步回 ViewModel 的真实状态
+            if (toggle.IsChecked != ViewModel.IsUpscaledLoaded)
+            {
+                toggle.IsChecked = ViewModel.IsUpscaledLoaded;
+            }
+
+            ReaderScrollViewer.ChangeView(null, 0, null, true);
         }
 
         private void PageModeMenuItem_Click(object sender, RoutedEventArgs e)
