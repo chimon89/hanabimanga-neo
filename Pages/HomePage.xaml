@@ -214,27 +214,27 @@
                                         <UniformGridLayout
                                             ItemsJustification="Start"
                                             ItemsStretch="None"
-                                            MinColumnSpacing="16"
-                                            MinRowSpacing="18"
-                                            MinItemWidth="172"
-                                            MinItemHeight="292" />
+                                            MinColumnSpacing="12"
+                                            MinRowSpacing="14"
+                                            MinItemWidth="184"
+                                            MinItemHeight="320" />
                                     </ItemsRepeater.Layout>
                                     <ItemsRepeater.ItemTemplate>
                                         <DataTemplate x:DataType="models:HomeFeedItem">
                                             <Button
-                                                Width="168"
-                                                Padding="0"
-                                                Margin="0,0,0,4"
+                                                Width="184"
+                                                Padding="10"
                                                 Background="Transparent"
                                                 BorderThickness="0"
+                                                CornerRadius="10"
                                                 HorizontalContentAlignment="Stretch"
                                                 VerticalContentAlignment="Stretch"
                                                 Click="ComicItem_Click"
                                                 Tag="{x:Bind Id}"
                                                 ToolTipService.ToolTip="{x:Bind Title}">
-                                                <Grid Width="160">
+                                                <Grid Width="164">
                                                     <Grid.RowDefinitions>
-                                                        <RowDefinition Height="220" />
+                                                        <RowDefinition Height="226" />
                                                         <RowDefinition Height="Auto" />
                                                         <RowDefinition Height="Auto" />
                                                     </Grid.RowDefinitions>
@@ -252,19 +252,23 @@
                                                         Grid.Row="1"
                                                         Text="{x:Bind Title}"
                                                         FontWeight="SemiBold"
-                                                        Margin="4,8,4,0"
+                                                        LineHeight="20"
+                                                        Height="40"
+                                                        Margin="2,8,2,0"
                                                         MaxLines="2"
                                                         TextWrapping="Wrap"
-                                                        TextTrimming="CharacterEllipsis" />
+                                                        TextTrimming="CharacterEllipsis"
+                                                        VerticalAlignment="Top" />
 
                                                     <TextBlock
                                                         Grid.Row="2"
                                                         Text="{x:Bind Author}"
                                                         FontSize="12"
                                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Margin="4,2,4,0"
+                                                        Margin="2,4,2,0"
                                                         MaxLines="1"
-                                                        TextTrimming="CharacterEllipsis" />
+                                                        TextTrimming="CharacterEllipsis"
+                                                        VerticalAlignment="Top" />
                                                 </Grid>
                                             </Button>
                                         </DataTemplate>
