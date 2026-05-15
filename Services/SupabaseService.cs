@@ -256,6 +256,7 @@ namespace hanabimanga.Services
                 Chapter = selectedChapter,
                 PreviousChapter = chapterIndex > 0 ? chapters[chapterIndex - 1] : null,
                 NextChapter = chapterIndex < chapters.Count - 1 ? chapters[chapterIndex + 1] : null,
+                TotalChapters = chapters.Count,
                 Pages = pageImages,
                 PlatformRouted = imageResponse.Metadata?.PlatformRouted ?? "",
                 HasUpscaled = hasUpscaled,
@@ -270,6 +271,23 @@ namespace hanabimanga.Services
                     }
                     : null,
             };
+        }
+
+        public async Task<bool> ShouldAutoUseUpscaledAsync(long comicId)
+        {
+            if (string.IsNullOrWhiteSpace(CurrentSession?.AccessToken))
+            {
+                return false;
+            }
+
+            var comic = await GetComicRecordByIdAsync(comicId);
+            if (comic?.HasUpscaled != true)
+            {
+                return false;
+            }
+
+            var quota = await GetPremiumQuotaAsync();
+            return quota?.IsVip == true;
         }
 
         public async Task SignInAsync(string email, string password)
@@ -337,6 +355,229 @@ namespace hanabimanga.Services
             return profile;
         }
 
+        public async Task<ComicInteractionState> GetComicInteractionStateAsync(long comicId)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再同步收藏和点赞状态。");
+            var favoriteTask = HasInteractionAsync("comics_favorites", userId, comicId);
+            var likeTask = HasInteractionAsync("comic_likes", userId, comicId);
+
+            await Task.WhenAll(favoriteTask, likeTask);
+
+            return new ComicInteractionState
+            {
+                IsFavorite = favoriteTask.Result,
+                IsLiked = likeTask.Result,
+            };
+        }
+
+        public async Task<ComicInteractionState> TryGetComicInteractionStateAsync(long comicId)
+        {
+            if (string.IsNullOrWhiteSpace(CurrentSession?.AccessToken) ||
+                string.IsNullOrWhiteSpace(CurrentUser?.Id))
+            {
+                return new ComicInteractionState();
+            }
+
+            return await GetComicInteractionStateAsync(comicId);
+        }
+
+        public async Task<bool> SetComicFavoriteAsync(long comicId, bool isFavorite)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再收藏漫画。");
+            await SetInteractionAsync("comics_favorites", userId, comicId, isFavorite);
+            return isFavorite;
+        }
+
+        public async Task<bool> SetComicLikedAsync(long comicId, bool isLiked)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再点赞漫画。");
+            await SetInteractionAsync("comic_likes", userId, comicId, isLiked);
+            return isLiked;
+        }
+
+        public async Task<BookshelfDocument> GetBookshelfAsync()
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再查看书架。");
+
+            var favoritesTask = GetInteractionRecordsAsync("comics_favorites", userId);
+            var likesTask = GetInteractionRecordsAsync("comic_likes", userId);
+            await Task.WhenAll(favoritesTask, likesTask);
+
+            var favoriteRows = favoritesTask.Result;
+            var likeRows = likesTask.Result;
+            var comicIds = favoriteRows
+                .Concat(likeRows)
+                .Select(row => row.ComicId)
+                .Distinct()
+                .ToList();
+            var comics = await GetComicRecordsByIdsAsync(comicIds);
+
+            return new BookshelfDocument
+            {
+                Favorites = MapBookshelfItems(favoriteRows, comics),
+                Likes = MapBookshelfItems(likeRows, comics),
+            };
+        }
+
+        public async Task<ComicSearchDocument> SearchComicsAsync(string searchTerm)
+        {
+            var normalized = searchTerm.Trim();
+            var records = await PostRpcAsync<List<RawComicSearchRecord>>(
+                "search_comics_pgroonga",
+                new
+                {
+                    search_term = normalized,
+                    page_number = 1,
+                    items_per_page = 40,
+                    sort_by = string.IsNullOrWhiteSpace(normalized) ? "popularity_weekly" : "updated_at",
+                    sort_order = "desc",
+                },
+                authenticated: false) ?? new List<RawComicSearchRecord>();
+
+            return new ComicSearchDocument
+            {
+                Query = normalized,
+                TotalCount = records.FirstOrDefault()?.TotalCount ?? records.Count,
+                Items = records.Select(MapSearchItem).ToList(),
+            };
+        }
+
+        public async Task<List<ComicListItem>> GetRandomComicsAsync(int limit = 18)
+        {
+            var safeLimit = Math.Clamp(limit, 1, 100);
+            var records = await PostRpcAsync<List<RawComicSearchRecord>>(
+                "get_random_comics",
+                new
+                {
+                    p_limit = safeLimit,
+                    p_category_id = (long?)null,
+                    p_exclude_comic_id = (long?)null,
+                },
+                authenticated: false) ?? new List<RawComicSearchRecord>();
+
+            return records
+                .Select(MapSearchItem)
+                .Select(item =>
+                {
+                    item.ShowSubtitle = false;
+                    item.Subtitle = null;
+                    return item;
+                })
+                .ToList();
+        }
+
+        public async Task<RecentReadingProgress?> GetRecentReadingProgressAsync()
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再同步阅读进度。");
+            var rows = await GetAuthenticatedRestRecordsAsync<RawReadingHistoryRecord>(
+                "reading_history?select=comic_id,chapter_id,page_index,chapter_title,total_pages,last_read_at" +
+                $"&user_id=eq.{Uri.EscapeDataString(userId)}&order=last_read_at.desc&limit=1");
+
+            var history = rows.FirstOrDefault();
+            if (history?.ChapterId is not { } chapterId || history.ComicId <= 0)
+            {
+                return null;
+            }
+
+            var comic = await GetComicRecordByIdAsync(history.ComicId);
+            return new RecentReadingProgress
+            {
+                ComicId = history.ComicId,
+                ChapterId = chapterId,
+                PageIndex = Math.Max(history.PageIndex ?? 1, 1),
+                TotalPages = Math.Max(history.TotalPages ?? 0, 0),
+                ComicTitle = comic?.Title ?? "漫画",
+                ChapterTitle = string.IsNullOrWhiteSpace(history.ChapterTitle)
+                    ? "继续阅读"
+                    : history.ChapterTitle!,
+                CoverUrl = comic?.CoverUrl,
+                LastReadAt = history.LastReadAt,
+            };
+        }
+
+        public async Task<List<ComicListItem>> GetReadingHistoryAsync()
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再查看阅读历史。");
+            var rows = await GetAuthenticatedRestRecordsAsync<RawReadingHistoryRecord>(
+                "reading_history?select=comic_id,chapter_id,page_index,chapter_title,total_pages,last_read_at" +
+                $"&user_id=eq.{Uri.EscapeDataString(userId)}&order=last_read_at.desc&limit=100");
+
+            var comicIds = rows
+                .Select(row => row.ComicId)
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+            var comics = await GetComicRecordsByIdsAsync(comicIds);
+            var items = new List<ComicListItem>();
+
+            foreach (var row in rows)
+            {
+                if (row.ChapterId is not { } chapterId ||
+                    !comics.TryGetValue(row.ComicId, out var comic))
+                {
+                    continue;
+                }
+
+                var page = Math.Max(row.PageIndex ?? 1, 1);
+                var total = Math.Max(row.TotalPages ?? 0, 0);
+                var pageText = total > 0 ? $"第 {Math.Clamp(page, 1, total)}/{total} 页" : "继续阅读";
+                var chapter = string.IsNullOrWhiteSpace(row.ChapterTitle) ? "章节" : row.ChapterTitle!.Trim();
+
+                items.Add(new ComicListItem
+                {
+                    Id = comic.Id.ToString(CultureInfo.InvariantCulture),
+                    ComicId = comic.Id,
+                    ChapterId = chapterId,
+                    StartPage = page,
+                    Title = comic.Title ?? "",
+                    Subtitle = $"{chapter} · {pageText}",
+                    CoverUrl = comic.CoverUrl,
+                    UpdatedAt = row.LastReadAt,
+                });
+            }
+
+            return items;
+        }
+
+        public async Task SaveReadingProgressAsync(ComicReaderDocument document, int pageIndex)
+        {
+            if (document.ComicId <= 0 || document.Chapter.Id <= 0) return;
+            if (string.IsNullOrWhiteSpace(CurrentSession?.AccessToken) ||
+                string.IsNullOrWhiteSpace(CurrentUser?.Id))
+            {
+                return;
+            }
+
+            var userId = CurrentUser!.Id!;
+            var safePageIndex = Math.Clamp(pageIndex, 1, Math.Max(document.Pages.Count, 1));
+            var body = new
+            {
+                user_id = userId,
+                comic_id = document.ComicId,
+                chapter_id = document.Chapter.Id,
+                page_index = safePageIndex,
+                chapter_title = document.Chapter.Title,
+                chapter_index = document.Chapter.Index,
+                total_pages = document.Pages.Count,
+                total_chapters = document.TotalChapters,
+                last_read_at = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            };
+
+            var existing = await GetAuthenticatedRestRecordsAsync<RawReadingHistoryRecord>(
+                "reading_history?select=comic_id" +
+                $"&user_id=eq.{Uri.EscapeDataString(userId)}&comic_id=eq.{document.ComicId}&limit=1");
+
+            if (existing.Count > 0)
+            {
+                await PatchRestRecordAsync(
+                    $"reading_history?user_id=eq.{Uri.EscapeDataString(userId)}&comic_id=eq.{document.ComicId}",
+                    body);
+                return;
+            }
+
+            await PostRestRecordAsync("reading_history", body);
+        }
+
         private Task<RawComicRecord?> GetComicRecordByIdAsync(long comicId)
         {
             return GetSingleRestRecordAsync<RawComicRecord>(
@@ -373,6 +614,58 @@ namespace hanabimanga.Services
         {
             return await GetRestRecordsAsync<RawChapterRecord>(
                 $"chapters?select=id,comic_id,title,idx,category,chapter_folder,image_count,image_format,updated_at&comic_id=eq.{comicId}&order=idx.asc&limit=1000");
+        }
+
+        private async Task<bool> HasInteractionAsync(string tableName, string userId, long comicId)
+        {
+            var rows = await GetAuthenticatedRestRecordsAsync<RawComicInteractionRecord>(
+                $"{tableName}?select=comic_id&user_id=eq.{Uri.EscapeDataString(userId)}&comic_id=eq.{comicId}&limit=1");
+
+            return rows.Count > 0;
+        }
+
+        private async Task SetInteractionAsync(
+            string tableName,
+            string userId,
+            long comicId,
+            bool shouldExist)
+        {
+            var exists = await HasInteractionAsync(tableName, userId, comicId);
+            if (exists == shouldExist) return;
+
+            if (shouldExist)
+            {
+                await PostRestRecordAsync(tableName, new
+                {
+                    user_id = userId,
+                    comic_id = comicId,
+                });
+                return;
+            }
+
+            await DeleteRestRecordsAsync(
+                $"{tableName}?user_id=eq.{Uri.EscapeDataString(userId)}&comic_id=eq.{comicId}");
+        }
+
+        private Task<List<RawComicInteractionRecord>> GetInteractionRecordsAsync(
+            string tableName,
+            string userId)
+        {
+            return GetAuthenticatedRestRecordsAsync<RawComicInteractionRecord>(
+                $"{tableName}?select=comic_id,created_at&user_id=eq.{Uri.EscapeDataString(userId)}&order=created_at.desc&limit=200");
+        }
+
+        private async Task<Dictionary<long, RawComicRecord>> GetComicRecordsByIdsAsync(List<long> comicIds)
+        {
+            if (comicIds.Count == 0) return new Dictionary<long, RawComicRecord>();
+
+            var ids = string.Join(",", comicIds.Distinct().OrderBy(id => id));
+            var records = await GetRestRecordsAsync<RawComicRecord>(
+                $"comics?select={ComicSelectColumns}&id=in.({ids})&limit={comicIds.Count}");
+
+            return records
+                .GroupBy(record => record.Id)
+                .ToDictionary(group => group.Key, group => group.First());
         }
 
         private async Task<RawReaderImageResponse> InvokeReaderImageUrlAsync(
@@ -601,6 +894,161 @@ namespace hanabimanga.Services
             return JsonConvert.DeserializeObject<List<T>>(body) ?? new List<T>();
         }
 
+        private async Task<List<T>> GetAuthenticatedRestRecordsAsync<T>(string relativePath)
+        {
+            var token = GetRequiredAccessToken();
+            return await SendRestAsync<List<T>>(
+                HttpMethod.Get,
+                relativePath,
+                token,
+                content: null,
+                parseList: true) ?? new List<T>();
+        }
+
+        private async Task PostRestRecordAsync(string tableName, object body)
+        {
+            var token = GetRequiredAccessToken();
+            var json = JsonConvert.SerializeObject(body);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            await SendRestAsync<object>(
+                HttpMethod.Post,
+                tableName,
+                token,
+                content,
+                parseList: false,
+                prefer: "return=minimal");
+        }
+
+        private async Task DeleteRestRecordsAsync(string relativePath)
+        {
+            var token = GetRequiredAccessToken();
+            await SendRestAsync<object>(
+                HttpMethod.Delete,
+                relativePath,
+                token,
+                content: null,
+                parseList: false,
+                prefer: "return=minimal");
+        }
+
+        private async Task PatchRestRecordAsync(string relativePath, object body)
+        {
+            var token = GetRequiredAccessToken();
+            var json = JsonConvert.SerializeObject(body);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            await SendRestAsync<object>(
+                HttpMethod.Patch,
+                relativePath,
+                token,
+                content,
+                parseList: false,
+                prefer: "return=minimal");
+        }
+
+        private async Task<RawPremiumQuota?> GetPremiumQuotaAsync()
+        {
+            var token = GetRequiredAccessToken();
+            using var content = new StringContent("{}", Encoding.UTF8, "application/json");
+            var raw = await SendRestAsync<object>(
+                HttpMethod.Post,
+                "rpc/get_premium_quota",
+                token,
+                content,
+                parseList: true);
+
+            if (raw == null) return null;
+
+            var json = raw.ToString();
+            if (string.IsNullOrWhiteSpace(json)) return null;
+
+            var trimmed = json.Trim();
+            if (trimmed.StartsWith("[", StringComparison.Ordinal))
+            {
+                return JsonConvert.DeserializeObject<List<RawPremiumQuota>>(trimmed)?.FirstOrDefault();
+            }
+
+            return JsonConvert.DeserializeObject<RawPremiumQuota>(trimmed);
+        }
+
+        private async Task<T?> PostRpcAsync<T>(string rpcName, object body, bool authenticated)
+        {
+            var token = authenticated ? GetRequiredAccessToken() : _supabaseAnonKey;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("SupabaseService 尚未初始化,无法调用 RPC。");
+            }
+
+            var json = JsonConvert.SerializeObject(body);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            return await SendRestAsync<T>(
+                HttpMethod.Post,
+                $"rpc/{rpcName}",
+                token,
+                content,
+                parseList: true);
+        }
+
+        private async Task<T?> SendRestAsync<T>(
+            HttpMethod method,
+            string relativePath,
+            string bearerToken,
+            HttpContent? content,
+            bool parseList,
+            string? prefer = null)
+        {
+            if (string.IsNullOrWhiteSpace(_supabaseUrl) || string.IsNullOrWhiteSpace(_supabaseAnonKey))
+            {
+                throw new InvalidOperationException("SupabaseService 尚未初始化,无法访问 REST 数据。");
+            }
+
+            var requestUri = $"{_supabaseUrl}/rest/v1/{relativePath}";
+            using var request = new HttpRequestMessage(method, requestUri);
+            request.Headers.TryAddWithoutValidation("apikey", _supabaseAnonKey);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            if (!string.IsNullOrWhiteSpace(prefer))
+            {
+                request.Headers.TryAddWithoutValidation("Prefer", prefer);
+            }
+            request.Content = content;
+
+            using var response = await _httpClient.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+            Debug.WriteLine($"[supabase-rest] {method} {relativePath}: {(int)response.StatusCode}\n{body}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Supabase REST 请求失败: {(int)response.StatusCode} {response.ReasonPhrase} {body}");
+            }
+
+            if (string.IsNullOrWhiteSpace(body) || !parseList) return default;
+
+            return JsonConvert.DeserializeObject<T>(body);
+        }
+
+        private string GetRequiredAccessToken()
+        {
+            var token = CurrentSession?.AccessToken;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("请先登录后再使用书架、收藏和点赞。");
+            }
+
+            return token;
+        }
+
+        private string GetRequiredCurrentUserId(string message)
+        {
+            if (string.IsNullOrWhiteSpace(CurrentSession?.AccessToken) ||
+                string.IsNullOrWhiteSpace(CurrentUser?.Id))
+            {
+                throw new InvalidOperationException(message);
+            }
+
+            return CurrentUser!.Id!;
+        }
+
         private static HomeFeedResponse MapHomeFeed(RawHomeFeedData data)
         {
             var resp = new HomeFeedResponse();
@@ -661,6 +1109,52 @@ namespace hanabimanga.Services
                 Author = string.IsNullOrEmpty(subtitle) ? null : subtitle,
                 CoverUrl = m.Cover,
                 UpdatedAt = m.LatestChapterUpdatedAt,
+            };
+        }
+
+        private static List<BookshelfComicItem> MapBookshelfItems(
+            List<RawComicInteractionRecord> rows,
+            IReadOnlyDictionary<long, RawComicRecord> comics)
+        {
+            var items = new List<BookshelfComicItem>();
+
+            foreach (var row in rows)
+            {
+                if (!comics.TryGetValue(row.ComicId, out var comic)) continue;
+
+                var subtitleParts = new[]
+                {
+                    comic.LatestChapterTitle,
+                    comic.LatestChapterUpdatedAt?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                }.Where(part => !string.IsNullOrWhiteSpace(part));
+
+                items.Add(new BookshelfComicItem
+                {
+                    Id = comic.Id.ToString(CultureInfo.InvariantCulture),
+                    ComicId = comic.Id,
+                    Title = comic.Title ?? "",
+                    Subtitle = string.Join(" · ", subtitleParts),
+                    CoverUrl = comic.CoverUrl,
+                    AddedAt = row.CreatedAt,
+                });
+            }
+
+            return items;
+        }
+
+        private static ComicListItem MapSearchItem(RawComicSearchRecord record)
+        {
+            var status = record.IsFinished ? "完结" : "连载中";
+            var chapters = record.ChaptersCount is > 0 ? $"{record.ChaptersCount} 话" : "章节未知";
+            var rating = record.RatingCount is > 0 ? $"评分 {record.RatingAverage ?? 0:0.0}" : "暂无评分";
+
+            return new ComicListItem
+            {
+                Id = record.Id.ToString(CultureInfo.InvariantCulture),
+                ComicId = record.Id,
+                Title = record.Title ?? "",
+                Subtitle = $"{status} · {chapters} · {rating}",
+                CoverUrl = record.CoverUrl,
             };
         }
 
