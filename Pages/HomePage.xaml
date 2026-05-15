@@ -204,7 +204,7 @@
                                     Text="{x:Bind Title}"
                                     FontSize="20"
                                     FontWeight="SemiBold"
-                                    Margin="24,0,20,10" />
+                                    Margin="20,0,20,10" />
 
                                 <ItemsRepeater
                                     ItemsSource="{x:Bind Items}"
@@ -213,7 +213,7 @@
                                     <ItemsRepeater.Layout>
                                         <UniformGridLayout
                                             ItemsJustification="Start"
-                                            ItemsStretch="None"
+                                            ItemsStretch="Fill"
                                             MinColumnSpacing="12"
                                             MinRowSpacing="14"
                                             MinItemWidth="184"
@@ -222,7 +222,7 @@
                                     <ItemsRepeater.ItemTemplate>
                                         <DataTemplate x:DataType="models:HomeFeedItem">
                                             <Button
-                                                Width="184"
+                                                HorizontalAlignment="Stretch"
                                                 Padding="10"
                                                 Background="Transparent"
                                                 BorderThickness="0"
@@ -232,7 +232,7 @@
                                                 Click="ComicItem_Click"
                                                 Tag="{x:Bind Id}"
                                                 ToolTipService.ToolTip="{x:Bind Title}">
-                                                <Grid Width="164">
+                                                <Grid HorizontalAlignment="Stretch">
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="226" />
                                                         <RowDefinition Height="Auto" />
