@@ -15,13 +15,49 @@
 
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="44" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <!--  自定义 TitleBar:系统标题栏由 OverlappedPresenter.SetBorderAndTitleBar 关闭  -->
+        <Grid
+            Grid.Row="0"
+            Background="Transparent"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock
+                x:Name="WindowTitleText"
+                Grid.Column="0"
+                Margin="20,0,0,0"
+                VerticalAlignment="Center"
+                Style="{ThemeResource CaptionTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                Text="公告"
+                TextTrimming="CharacterEllipsis" />
+
+            <Button
+                Grid.Column="1"
+                Width="46"
+                Height="44"
+                Padding="0"
+                Background="Transparent"
+                BorderThickness="0"
+                CornerRadius="0"
+                Click="CloseButton_Click"
+                ToolTipService.ToolTip="关闭">
+                <FontIcon Glyph="&#xE8BB;" FontSize="10" />
+            </Button>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel
                 MaxWidth="760"
-                Padding="40,32,40,40"
+                Padding="40,28,40,40"
                 HorizontalAlignment="Center"
                 Spacing="20">
 

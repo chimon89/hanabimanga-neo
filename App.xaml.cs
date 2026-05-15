@@ -28,7 +28,12 @@ namespace hanabimanga
     /// </summary>
     public partial class App : Application
     {
-        private Window? _window;
+        private static Window? _window;
+
+        /// <summary>
+        /// 主窗口引用,供子窗口(如 AnnouncementWindow)定位/居中使用。
+        /// </summary>
+        public static Window? MainWindow => _window;
 
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code

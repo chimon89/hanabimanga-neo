@@ -15,18 +15,26 @@ using WinRT.Interop;
 namespace hanabimanga.Pages
 {
     /// <summary>
-    /// 独立的公告查看窗口。从 Supabase announcements 表读取数据并用原生 UI 渲染,
-    /// 由 HomePage 在用户点击轮播图(targetType=url 且 targetValue 是 UUID)时唤起。
+    /// 独立的公告查看窗口:
+    /// - 数据来源 Supabase announcements 表(public SELECT 允许)
+    /// - OverlappedPresenter 关闭系统标题栏(无 OS caption => 不可拖动),
+    ///   也禁用 resize/minimize/maximize
+    /// - 自定义 TitleBar 在 XAML 顶部,仅含标题文字和关闭按钮
+    /// - 居中在 MainWindow 上(创建时 snapshot 位置,不跟随)
     /// </summary>
     public sealed partial class AnnouncementWindow : Window
     {
+        private const int DefaultWidth = 900;
+        private const int DefaultHeight = 720;
+
         // 防止窗口被 GC 回收而提前关闭
         private static readonly List<AnnouncementWindow> _alive = new();
 
         public AnnouncementWindow()
         {
             InitializeComponent();
-            ResizeToDefault();
+            ConfigurePresenter();
+            CenterOnMainWindow();
 
             _alive.Add(this);
             Closed += (_, _) => _alive.Remove(this);
@@ -66,7 +74,9 @@ namespace hanabimanga.Pages
 
         private void Apply(Announcement announcement)
         {
-            Title = string.IsNullOrWhiteSpace(announcement.Title) ? "公告" : announcement.Title;
+            var displayTitle = string.IsNullOrWhiteSpace(announcement.Title) ? "公告" : announcement.Title;
+            Title = displayTitle;
+            WindowTitleText.Text = displayTitle;
 
             TitleText.Text = announcement.Title;
             (TypeBadgeText.Text, TypeBadge.Background) = MapType(announcement.AnnouncementType);
@@ -139,6 +149,62 @@ namespace hanabimanga.Pages
             }
         }
 
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
+        private void ConfigurePresenter()
+        {
+            try
+            {
+                var appWindow = GetAppWindow(this);
+                if (appWindow.Presenter is OverlappedPresenter presenter)
+                {
+                    // 去掉系统标题栏:无 caption 区域 => 用户无法拖动
+                    presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
+                    presenter.IsResizable = false;
+                    presenter.IsMaximizable = false;
+                    presenter.IsMinimizable = false;
+                }
+                appWindow.Resize(new SizeInt32(DefaultWidth, DefaultHeight));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[announcements] configure presenter failed: {ex.Message}");
+            }
+        }
+
+        private void CenterOnMainWindow()
+        {
+            try
+            {
+                if (App.MainWindow is null) return;
+
+                var appWindow = GetAppWindow(this);
+                var mainAppWindow = GetAppWindow(App.MainWindow);
+
+                var mainPos = mainAppWindow.Position;
+                var mainSize = mainAppWindow.Size;
+                var mySize = appWindow.Size;
+
+                var x = mainPos.X + (mainSize.Width - mySize.Width) / 2;
+                var y = mainPos.Y + (mainSize.Height - mySize.Height) / 2;
+                appWindow.Move(new PointInt32(x, y));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[announcements] center failed: {ex.Message}");
+            }
+        }
+
+        private static AppWindow GetAppWindow(Window window)
+        {
+            var handle = WindowNative.GetWindowHandle(window);
+            var windowId = Win32Interop.GetWindowIdFromWindow(handle);
+            return AppWindow.GetFromWindowId(windowId);
+        }
+
         private (string Label, Brush Background) MapType(string type)
         {
             var resources = Application.Current.Resources;
@@ -153,21 +219,6 @@ namespace hanabimanga.Pages
                 _ => ("公告",
                     (Brush)resources["AccentFillColorTertiaryBrush"]),
             };
-        }
-
-        private void ResizeToDefault()
-        {
-            try
-            {
-                var handle = WindowNative.GetWindowHandle(this);
-                var windowId = Win32Interop.GetWindowIdFromWindow(handle);
-                var appWindow = AppWindow.GetFromWindowId(windowId);
-                appWindow.Resize(new SizeInt32(900, 720));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[announcements] resize failed: {ex.Message}");
-            }
         }
     }
 }
