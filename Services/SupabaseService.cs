@@ -298,6 +298,24 @@ namespace hanabimanga.Services
             await Client.Auth.SignOut(Constants.SignOutScope.Local);
         }
 
+        public async Task<Announcement?> GetAnnouncementAsync(string announcementId)
+        {
+            if (string.IsNullOrWhiteSpace(announcementId)) return null;
+
+            var response = await Client
+                .From<Announcement>()
+                .Where(announcement => announcement.Id == announcementId)
+                .Limit(1)
+                .Get();
+
+            var announcement = response.Models.FirstOrDefault();
+            Debug.WriteLine(
+                announcement != null
+                    ? $"[announcements] hit id={announcement.Id}, title={announcement.Title}"
+                    : $"[announcements] no record for id={announcementId}");
+            return announcement;
+        }
+
         public async Task<UserProfile?> GetCurrentUserProfileAsync(string userId)
         {
             var response = await Client

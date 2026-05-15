@@ -80,6 +80,14 @@ namespace hanabimanga.Pages
             Frame.Navigate(typeof(ComicDetailPage), comicId);
         }
 
+        private static void OpenAnnouncementWindow(string announcementId)
+        {
+            // 立即弹出窗口(带 ProgressRing),数据加载在 LoadAsync 内异步完成
+            var window = new AnnouncementWindow();
+            window.Activate();
+            _ = window.LoadAsync(announcementId);
+        }
+
         private async void BannerItem_Tapped(object sender, TappedRoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is not HomeFeedBanner banner) return;
@@ -96,18 +104,17 @@ namespace hanabimanga.Pages
                     Frame.Navigate(typeof(ComicDetailPage), value);
                     break;
                 case "url":
-                    if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-                        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                    if (Guid.TryParse(value, out var announcementId))
                     {
-                        await Launcher.LaunchUriAsync(uri);
+                        // targetValue 是 announcement UUID:从 supabase 取数据并在新窗口
+                        // 用原生 UI 显示,无需打开浏览器
+                        OpenAnnouncementWindow(announcementId.ToString());
                     }
-                    else if (Guid.TryParse(value, out var announcementId))
+                    else if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+                             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
                     {
-                        // 后端有时只放 announcement UUID,按官网默认路径拼成
-                        // https://hanabimanga.com/announcements/{uuid}
-                        var announcementUri = new Uri(
-                            $"https://hanabimanga.com/announcements/{announcementId}");
-                        await Launcher.LaunchUriAsync(announcementUri);
+                        // 完整 URL 走系统浏览器(如 QQ 群邀请链接、外部网站)
+                        await Launcher.LaunchUriAsync(uri);
                     }
                     else
                     {
