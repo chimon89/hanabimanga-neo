@@ -12,7 +12,7 @@ namespace hanabimanga.ViewModels
 {
     public class HomePageViewModel : INotifyPropertyChanged
     {
-        private const int RecommendedPageSize = 6;
+        private const int RecommendedPageSize = 4;
         private readonly List<HomeFeedItem> _allRecommendedItems = new();
         private int _recommendedStartIndex;
 
