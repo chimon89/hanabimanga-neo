@@ -69,6 +69,10 @@ namespace hanabimanga.Services
                 var client = new Client(url, anonKey, options);
                 await client.InitializeAsync();
 
+                // 从磁盘还原 CurrentSession。InitializeAsync 内部不会自动 LoadSession,
+                // 必须显式调一次,才能让后续 RetrieveSessionAsync 有 Session 可刷。
+                client.Auth.LoadSession();
+
                 // 启动时主动刷新:若磁盘上的 access_token 已过期,立即用 refresh_token 换新;
                 // 若 refresh_token 也失效,SDK 会把用户登出。
                 try
