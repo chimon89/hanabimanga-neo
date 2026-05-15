@@ -261,7 +261,10 @@ namespace hanabimanga.ViewModels
                 return;
             }
 
-            if (_selectedRangeStart > count)
+            // 章节总数小于 RangeSize(50)时,默认的 _selectedRangeEnd=50 无法和
+            // 实际生成的 range(如 1-10)匹配,导致唯一的标签未选中。统一钳制到
+            // 实际章节数范围内,保证默认有且仅有一个标签被选中。
+            if (_selectedRangeStart > count || _selectedRangeEnd > count)
             {
                 _selectedRangeStart = 1;
                 _selectedRangeEnd = Math.Min(RangeSize, count);
