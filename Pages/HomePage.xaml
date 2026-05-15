@@ -92,9 +92,10 @@
                                     <UniformGridLayout
                                         ItemsJustification="Start"
                                         ItemsStretch="Fill"
+                                        MaximumRowsOrColumns="2"
                                         MinColumnSpacing="10"
                                         MinRowSpacing="8"
-                                        MinItemWidth="200"
+                                        MinItemWidth="120"
                                         MinItemHeight="68" />
                                 </ItemsRepeater.Layout>
                                 <ItemsRepeater.ItemTemplate>
