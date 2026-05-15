@@ -31,9 +31,9 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" MinWidth="120" />
-                <ColumnDefinition Width="520" />
-                <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition Width="*" MinWidth="20" />
+                <ColumnDefinition Width="2*" MinWidth="200" />
+                <ColumnDefinition Width="*" MinWidth="20" />
                 <ColumnDefinition x:Name="RightPaddingColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
