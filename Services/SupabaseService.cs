@@ -596,7 +596,8 @@ namespace hanabimanga.Services
                         Id = b.Id ?? "",
                         Title = b.Title,
                         ImageUrl = b.ImageUrl,
-                        LinkUrl = b.LinkUrl,
+                        TargetType = b.TargetType,
+                        TargetValue = b.TargetValue,
                     });
                 }
             }

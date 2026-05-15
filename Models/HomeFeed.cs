@@ -17,7 +17,11 @@ namespace hanabimanga.Models
         public string Id { get; set; } = "";
         public string? Title { get; set; }
         public string? ImageUrl { get; set; }
-        public string? LinkUrl { get; set; }
+
+        // 跳转类型,见 hanabimanga-develop-skill reference/edge-functions.md 1408 行起:
+        // "comic" -> TargetValue 是漫画 ID;"url" -> TargetValue 是外链
+        public string? TargetType { get; set; }
+        public string? TargetValue { get; set; }
     }
 
     public class HomeFeedSection
@@ -109,7 +113,10 @@ namespace hanabimanga.Models
         [JsonProperty("imageUrl")]
         public string? ImageUrl { get; set; }
 
-        [JsonProperty("linkUrl")]
-        public string? LinkUrl { get; set; }
+        [JsonProperty("targetType")]
+        public string? TargetType { get; set; }
+
+        [JsonProperty("targetValue")]
+        public string? TargetValue { get; set; }
     }
 }

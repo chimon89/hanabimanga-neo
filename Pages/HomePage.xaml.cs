@@ -1,8 +1,11 @@
 using System;
+using hanabimanga.Models;
 using hanabimanga.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.System;
 
 namespace hanabimanga.Pages
 {
@@ -75,6 +78,40 @@ namespace hanabimanga.Pages
 
             System.Diagnostics.Debug.WriteLine($"[home] navigate comic detail: {comicId}");
             Frame.Navigate(typeof(ComicDetailPage), comicId);
+        }
+
+        private async void BannerItem_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not HomeFeedBanner banner) return;
+
+            var type = banner.TargetType?.Trim().ToLowerInvariant();
+            var value = banner.TargetValue?.Trim();
+            System.Diagnostics.Debug.WriteLine($"[home] banner tapped: type={type}, value={value}");
+
+            if (string.IsNullOrWhiteSpace(value)) return;
+
+            switch (type)
+            {
+                case "comic":
+                    Frame.Navigate(typeof(ComicDetailPage), value);
+                    break;
+                case "url":
+                    // 仅放行绝对 http/https URL,避免误把 UUID / 相对路径当外链打开
+                    if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+                        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+                    {
+                        await Launcher.LaunchUriAsync(uri);
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[home] banner url not absolute http(s),跳过: {value}");
+                    }
+                    break;
+                default:
+                    System.Diagnostics.Debug.WriteLine($"[home] banner target type 未处理: {type}");
+                    break;
+            }
         }
     }
 }
