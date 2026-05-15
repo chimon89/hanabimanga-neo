@@ -96,16 +96,23 @@ namespace hanabimanga.Pages
                     Frame.Navigate(typeof(ComicDetailPage), value);
                     break;
                 case "url":
-                    // 仅放行绝对 http/https URL,避免误把 UUID / 相对路径当外链打开
                     if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
                         (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
                     {
                         await Launcher.LaunchUriAsync(uri);
                     }
+                    else if (Guid.TryParse(value, out var announcementId))
+                    {
+                        // 后端有时只放 announcement UUID,按官网默认路径拼成
+                        // https://hanabimanga.com/announcements/{uuid}
+                        var announcementUri = new Uri(
+                            $"https://hanabimanga.com/announcements/{announcementId}");
+                        await Launcher.LaunchUriAsync(announcementUri);
+                    }
                     else
                     {
                         System.Diagnostics.Debug.WriteLine(
-                            $"[home] banner url not absolute http(s),跳过: {value}");
+                            $"[home] banner url 既不是绝对地址也不是 UUID,跳过: {value}");
                     }
                     break;
                 default:
