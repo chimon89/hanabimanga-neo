@@ -168,7 +168,6 @@
                                     <Grid
                                         Background="Transparent"
                                         Tapped="BannerItem_Tapped"
-                                        DataContext="{x:Bind}"
                                         ToolTipService.ToolTip="{x:Bind Title}">
                                         <Image
                                             Source="{x:Bind ImageUrl, Converter={StaticResource StringToImageSource}}"
