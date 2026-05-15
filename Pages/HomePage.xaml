@@ -91,16 +91,16 @@
                                 <ItemsRepeater.Layout>
                                     <UniformGridLayout
                                         ItemsJustification="Start"
-                                        ItemsStretch="None"
+                                        ItemsStretch="Fill"
                                         MinColumnSpacing="10"
                                         MinRowSpacing="8"
-                                        MinItemWidth="168"
+                                        MinItemWidth="200"
                                         MinItemHeight="68" />
                                 </ItemsRepeater.Layout>
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="models:HomeFeedItem">
                                         <Button
-                                            Width="168"
+                                            HorizontalAlignment="Stretch"
                                             Height="68"
                                             Padding="0"
                                             Background="Transparent"
@@ -112,12 +112,12 @@
                                             ToolTipService.ToolTip="{x:Bind Title}">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="48" />
+                                                    <ColumnDefinition Width="50" />
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
 
                                                 <Border
-                                                    Width="48"
+                                                    Width="50"
                                                     Height="66"
                                                     CornerRadius="6"
                                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
@@ -128,8 +128,9 @@
 
                                                 <StackPanel
                                                     Grid.Column="1"
-                                                    Margin="8,2,0,0"
-                                                    Spacing="3">
+                                                    Margin="10,2,4,0"
+                                                    VerticalAlignment="Center"
+                                                    Spacing="4">
                                                     <TextBlock
                                                         Text="{x:Bind Title}"
                                                         FontSize="13"
