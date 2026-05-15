@@ -113,6 +113,7 @@ namespace hanabimanga.ViewModels
         public string TitleBarTitle => $"{ComicTitle} · {ChapterTitle}";
         public ReaderPageImage? CurrentPageImage => Pages.ElementAtOrDefault(CurrentPage - 1);
         public string CurrentPageUrl => CurrentPageImage?.Url ?? "";
+        public ComicReaderDocument? CurrentDocument => _document;
 
         // AI 超分(高清)相关
         public bool UseUpscaled
@@ -137,7 +138,14 @@ namespace hanabimanga.ViewModels
         public async Task LoadAsync(ComicReaderNavigationParameter? parameter)
         {
             _lastParameter = parameter;
-            await LoadCoreAsync(parameter, _useUpscaled);
+            var useUpscaled = _useUpscaled || await ShouldUseUpscaledByDefaultAsync(parameter);
+            UseUpscaled = useUpscaled;
+            await LoadCoreAsync(parameter, useUpscaled);
+
+            if (_document != null && _document.IsUpscaled != UseUpscaled)
+            {
+                UseUpscaled = _document.IsUpscaled;
+            }
         }
 
         public async Task SetUpscaledAsync(bool useUpscaled)
@@ -196,7 +204,9 @@ namespace hanabimanga.ViewModels
                 {
                     Pages.Add(page);
                 }
-                CurrentPage = Pages.Count > 0 ? 1 : 0;
+                CurrentPage = Pages.Count > 0
+                    ? Math.Clamp(parameter.StartPage, 1, Pages.Count)
+                    : 0;
 
                 RefreshAll();
             }
@@ -207,6 +217,22 @@ namespace hanabimanga.ViewModels
             finally
             {
                 IsLoading = false;
+            }
+        }
+
+        private async Task<bool> ShouldUseUpscaledByDefaultAsync(ComicReaderNavigationParameter? parameter)
+        {
+            if (parameter == null || parameter.ComicId <= 0) return false;
+            if (!SupabaseService.Instance.IsInitialized) return false;
+
+            try
+            {
+                return await SupabaseService.Instance.ShouldAutoUseUpscaledAsync(parameter.ComicId);
+            }
+            catch
+            {
+                // 自动高清只是增强体验,预判失败时保持标清默认加载。
+                return false;
             }
         }
 
@@ -231,6 +257,12 @@ namespace hanabimanga.ViewModels
 
             CurrentPage++;
             return true;
+        }
+
+        public async Task SaveCurrentProgressAsync()
+        {
+            if (_document == null || CurrentPage <= 0) return;
+            await SupabaseService.Instance.SaveReadingProgressAsync(_document, CurrentPage);
         }
 
         private void RefreshAll()

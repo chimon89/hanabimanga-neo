@@ -365,3 +365,6 @@ FodyWeavers.xsd
 # Local secrets — Supabase URL/Key
 appsettings.local.json
 appsettings.*.local.json
+
+# Development certificate
+devcert.pfx

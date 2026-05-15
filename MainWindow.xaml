@@ -10,10 +10,10 @@
     Title="花火漫画">
 
     <Window.SystemBackdrop>
-        <MicaBackdrop />
+        <MicaBackdrop Kind="BaseAlt" />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid Background="{ThemeResource SakuraMicaOverlayBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="48" />
             <RowDefinition Height="*" />
@@ -135,7 +135,8 @@
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Center"
                 QueryIcon="Find"
-                PlaceholderText="搜索漫画、作者、章节" />
+                PlaceholderText="搜索漫画、作者、章节"
+                QuerySubmitted="TitleBarSearchBox_QuerySubmitted" />
         </Grid>
 
         <NavigationView
@@ -148,6 +149,7 @@
             IsTitleBarAutoPaddingEnabled="False"
             OpenPaneLength="260"
             CompactPaneLength="48"
+            SelectionChanged="NavigationRoot_SelectionChanged"
             DisplayModeChanged="NavigationRoot_DisplayModeChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem
@@ -163,24 +165,16 @@
                 <NavigationViewItemHeader Content="漫画" />
 
                 <NavigationViewItem
+                    x:Name="DiscoverNavigationItem"
                     Content="发现"
-                    IsEnabled="False"
                     Tag="discover">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE721;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
-                    Content="书架"
-                    IsEnabled="False"
-                    Tag="library">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8F1;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem
+                    x:Name="HistoryNavigationItem"
                     Content="历史"
-                    IsEnabled="False"
                     Tag="history">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE81C;" />
@@ -196,14 +190,6 @@
                     Tag="ranking">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8E5;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem
-                    Content="收藏"
-                    IsEnabled="False"
-                    Tag="favorites">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE734;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
@@ -416,5 +402,99 @@
 
             <Frame x:Name="RootFrame" />
         </NavigationView>
+
+        <Border
+            x:Name="ContinueReadingBar"
+            Grid.Row="1"
+            Grid.Column="0"
+            Width="520"
+            MaxWidth="620"
+            MinHeight="76"
+            Margin="0,0,56,28"
+            Padding="12"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            CornerRadius="8"
+            BorderThickness="1"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            Background="{ThemeResource ContinueReadingBarBackgroundBrush}"
+            PointerEntered="ContinueReadingBar_PointerEntered"
+            PointerExited="ContinueReadingBar_PointerExited"
+            Visibility="Collapsed">
+            <Grid ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button
+                    Grid.Column="0"
+                    Padding="10,6"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="ContinueReadingButton_Click"
+                    ToolTipService.ToolTip="继续上次阅读">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="48" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border
+                            Width="48"
+                            Height="56"
+                            CornerRadius="8"
+                            Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                            <Image
+                                x:Name="ContinueReadingCoverImage"
+                                Stretch="UniformToFill" />
+                        </Border>
+
+                        <StackPanel
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Spacing="1">
+                            <TextBlock
+                                x:Name="ContinueReadingTitleTextBlock"
+                                Text="继续阅读"
+                                FontWeight="SemiBold"
+                                MaxLines="1"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                x:Name="ContinueReadingSubtitleTextBlock"
+                                Text="上次看到的位置"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                MaxLines="1"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <TextBlock
+                            x:Name="ContinueReadingProgressTextBlock"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontSize="12"
+                            Text="继续" />
+                    </Grid>
+                </Button>
+
+                <Button
+                    Grid.Column="1"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="DismissContinueReadingBar_Click"
+                    ToolTipService.ToolTip="关闭">
+                    <FontIcon Glyph="&#xE711;" FontSize="12" />
+                </Button>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

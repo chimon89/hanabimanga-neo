@@ -20,7 +20,11 @@ namespace hanabimanga.ViewModels
         private int _selectedRangeEnd = RangeSize;
         private bool _isDescending;
         private bool _isLoading;
+        private bool _isInteractionBusy;
+        private bool _isFavorite;
+        private bool _isLiked;
         private string? _errorMessage;
+        private string _errorTitle = "加载失败";
 
         public ObservableCollection<string> TagChips { get; } = new();
         public ObservableCollection<ChapterCategoryOption> CategoryOptions { get; } = new();
@@ -50,11 +54,60 @@ namespace hanabimanga.ViewModels
             }
         }
 
+        public string ErrorTitle
+        {
+            get => _errorTitle;
+            private set
+            {
+                if (_errorTitle == value) return;
+                _errorTitle = value;
+                OnPropertyChanged();
+            }
+        }
+
         public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
         public bool HasDetail => _detail != null;
         public bool HasSummary => !string.IsNullOrWhiteSpace(Summary);
         public bool HasTags => TagChips.Count > 0;
         public bool HasChapters => VisibleChapters.Count > 0;
+        public bool IsInteractionBusy
+        {
+            get => _isInteractionBusy;
+            private set
+            {
+                if (_isInteractionBusy == value) return;
+                _isInteractionBusy = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsInteractionEnabled));
+            }
+        }
+        public bool IsInteractionEnabled => !IsInteractionBusy;
+
+        public bool IsFavorite
+        {
+            get => _isFavorite;
+            private set
+            {
+                if (_isFavorite == value) return;
+                _isFavorite = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(FavoriteButtonText));
+                OnPropertyChanged(nameof(FavoriteIconGlyph));
+            }
+        }
+
+        public bool IsLiked
+        {
+            get => _isLiked;
+            private set
+            {
+                if (_isLiked == value) return;
+                _isLiked = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(LikeButtonText));
+                OnPropertyChanged(nameof(LikeIconGlyph));
+            }
+        }
 
         public string Title => _detail?.Title ?? "漫画详情";
         public string CategoryName => _detail?.CategoryName ?? "漫画";
@@ -70,6 +123,10 @@ namespace hanabimanga.ViewModels
         public string RatingText => BuildRatingText();
         public string ReleaseText => _detail?.ReleaseDate is { } date ? date.ToString("yyyy") : "未知年份";
         public string LatestText => BuildLatestText();
+        public string FavoriteButtonText => IsFavorite ? "已收藏" : "收藏";
+        public string LikeButtonText => IsLiked ? "已点赞" : "点赞";
+        public string FavoriteIconGlyph => IsFavorite ? "\uE735" : "\uE734";
+        public string LikeIconGlyph => IsLiked ? "\uE8E1" : "\uE8E3";
 
         public async Task LoadAsync(string? comicDocumentId)
         {
@@ -77,17 +134,20 @@ namespace hanabimanga.ViewModels
 
             if (!SupabaseService.Instance.IsInitialized)
             {
+                ErrorTitle = "加载失败";
                 ErrorMessage = "Supabase 未初始化:请检查 appsettings.local.json 中的 Url / AnonKey。";
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(comicDocumentId))
             {
+                ErrorTitle = "加载失败";
                 ErrorMessage = "缺少漫画编号,无法打开详情。";
                 return;
             }
 
             IsLoading = true;
+            ErrorTitle = "加载失败";
             ErrorMessage = null;
 
             try
@@ -95,22 +155,81 @@ namespace hanabimanga.ViewModels
                 _detail = await SupabaseService.Instance.GetComicDetailAsync(comicDocumentId);
                 if (_detail == null)
                 {
+                    ErrorTitle = "加载失败";
                     ErrorMessage = "没有找到这部漫画。";
                     return;
                 }
 
                 BuildTagChips();
                 BuildChapterCategories();
+                await RefreshInteractionStateAsync();
                 RefreshDetailProperties();
             }
             catch (Exception ex)
             {
+                ErrorTitle = "加载失败";
                 ErrorMessage = $"加载漫画详情失败:{ex.Message}";
             }
             finally
             {
                 IsLoading = false;
             }
+        }
+
+        public async Task ToggleFavoriteAsync()
+        {
+            if (_detail == null || IsInteractionBusy) return;
+
+            IsInteractionBusy = true;
+            ErrorTitle = "收藏失败";
+            ErrorMessage = null;
+            try
+            {
+                IsFavorite = await SupabaseService.Instance.SetComicFavoriteAsync(_detail.Id, !IsFavorite);
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"收藏操作失败:{ex.Message}";
+            }
+            finally
+            {
+                IsInteractionBusy = false;
+            }
+        }
+
+        public async Task ToggleLikeAsync()
+        {
+            if (_detail == null || IsInteractionBusy) return;
+
+            IsInteractionBusy = true;
+            ErrorTitle = "点赞失败";
+            ErrorMessage = null;
+            try
+            {
+                IsLiked = await SupabaseService.Instance.SetComicLikedAsync(_detail.Id, !IsLiked);
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"点赞操作失败:{ex.Message}";
+            }
+            finally
+            {
+                IsInteractionBusy = false;
+            }
+        }
+
+        private async Task RefreshInteractionStateAsync()
+        {
+            if (_detail == null)
+            {
+                IsFavorite = false;
+                IsLiked = false;
+                return;
+            }
+
+            var state = await SupabaseService.Instance.TryGetComicInteractionStateAsync(_detail.Id);
+            IsFavorite = state.IsFavorite;
+            IsLiked = state.IsLiked;
         }
 
         public void SelectCategory(string category)
@@ -383,6 +502,12 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(RatingText));
             OnPropertyChanged(nameof(ReleaseText));
             OnPropertyChanged(nameof(LatestText));
+            OnPropertyChanged(nameof(ErrorTitle));
+            OnPropertyChanged(nameof(FavoriteButtonText));
+            OnPropertyChanged(nameof(LikeButtonText));
+            OnPropertyChanged(nameof(FavoriteIconGlyph));
+            OnPropertyChanged(nameof(LikeIconGlyph));
+            OnPropertyChanged(nameof(IsInteractionEnabled));
             OnPropertyChanged(nameof(HasSummary));
             OnPropertyChanged(nameof(HasTags));
             OnPropertyChanged(nameof(HasChapters));

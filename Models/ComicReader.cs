@@ -7,6 +7,7 @@ namespace hanabimanga.Models
     {
         public long ComicId { get; set; }
         public long ChapterId { get; set; }
+        public int StartPage { get; set; } = 1;
     }
 
     public sealed class ComicReaderDocument
@@ -16,6 +17,7 @@ namespace hanabimanga.Models
         public ComicChapter Chapter { get; set; } = new();
         public ComicChapter? PreviousChapter { get; set; }
         public ComicChapter? NextChapter { get; set; }
+        public int TotalChapters { get; set; }
         public List<ReaderPageImage> Pages { get; set; } = new();
         public string PlatformRouted { get; set; } = "";
         public bool UsesWebFallback => PlatformRouted == "web";
@@ -74,6 +76,21 @@ namespace hanabimanga.Models
 
         [JsonProperty("dailyLimit")]
         public int DailyLimit { get; set; }
+
+        [JsonProperty("isVip")]
+        public bool IsVip { get; set; }
+    }
+
+    internal sealed class RawPremiumQuota
+    {
+        [JsonProperty("usedToday")]
+        public int UsedToday { get; set; }
+
+        [JsonProperty("dailyLimit")]
+        public int DailyLimit { get; set; }
+
+        [JsonProperty("remaining")]
+        public int Remaining { get; set; }
 
         [JsonProperty("isVip")]
         public bool IsVip { get; set; }

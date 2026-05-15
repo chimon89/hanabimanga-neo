@@ -61,6 +61,16 @@ namespace hanabimanga.Pages
             ViewModel.ToggleSortDirection();
         }
 
+        private async void FavoriteButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.ToggleFavoriteAsync();
+        }
+
+        private async void LikeButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ViewModel.ToggleLikeAsync();
+        }
+
         private void ChapterButton_Click(object sender, RoutedEventArgs e)
         {
             var key = (sender as FrameworkElement)?.Tag as string;

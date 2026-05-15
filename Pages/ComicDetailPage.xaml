@@ -33,7 +33,7 @@
                     IsClosable="False"
                     Severity="Error"
                     IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
-                    Title="加载失败"
+                    Title="{x:Bind ViewModel.ErrorTitle, Mode=OneWay}"
                     Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
 
                 <StackPanel
@@ -179,16 +179,22 @@
                     </Border>
 
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Padding="12,6">
+                        <Button
+                            Padding="12,6"
+                            Click="FavoriteButton_Click"
+                            IsEnabled="{x:Bind ViewModel.IsInteractionEnabled, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE734;" FontSize="13" />
-                                <TextBlock Text="收藏" />
+                                <FontIcon Glyph="{x:Bind ViewModel.FavoriteIconGlyph, Mode=OneWay}" FontSize="13" />
+                                <TextBlock Text="{x:Bind ViewModel.FavoriteButtonText, Mode=OneWay}" />
                             </StackPanel>
                         </Button>
-                        <Button Padding="12,6">
+                        <Button
+                            Padding="12,6"
+                            Click="LikeButton_Click"
+                            IsEnabled="{x:Bind ViewModel.IsInteractionEnabled, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE8E1;" FontSize="13" />
-                                <TextBlock Text="点赞" />
+                                <FontIcon Glyph="{x:Bind ViewModel.LikeIconGlyph, Mode=OneWay}" FontSize="13" />
+                                <TextBlock Text="{x:Bind ViewModel.LikeButtonText, Mode=OneWay}" />
                             </StackPanel>
                         </Button>
                         <Button Padding="12,6">

@@ -13,6 +13,7 @@ namespace hanabimanga.Pages
     {
         public ComicReaderPageViewModel ViewModel { get; } = new();
         public event EventHandler? TitleBarInfoChanged;
+        public event EventHandler? ReadingProgressChanged;
 
         public string TitleBarCategory => "阅读器";
         public string TitleBarTitle => ViewModel.TitleBarTitle;
@@ -27,6 +28,7 @@ namespace hanabimanga.Pages
             base.OnNavigatedTo(e);
             TitleBarInfoChanged?.Invoke(this, EventArgs.Empty);
             await ViewModel.LoadAsync(e.Parameter as ComicReaderNavigationParameter);
+            await SaveProgressAndNotifyAsync();
             ReaderScrollViewer.ChangeView(null, 0, null, true);
             TitleBarInfoChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -57,6 +59,7 @@ namespace hanabimanga.Pages
         {
             if (ViewModel.GoToPreviousPage())
             {
+                _ = SaveProgressAndNotifyAsync();
                 ReaderScrollViewer.ChangeView(null, 0, null, true);
             }
         }
@@ -65,6 +68,7 @@ namespace hanabimanga.Pages
         {
             if (ViewModel.GoToNextPage())
             {
+                _ = SaveProgressAndNotifyAsync();
                 ReaderScrollViewer.ChangeView(null, 0, null, true);
             }
         }
@@ -81,6 +85,7 @@ namespace hanabimanga.Pages
             // ToggleButton 内部已先翻转,IsChecked 表示用户期望的新状态
             var target = toggle.IsChecked == true;
             await ViewModel.SetUpscaledAsync(target);
+            await SaveProgressAndNotifyAsync();
 
             // 失败或被服务端回退时,IsUpscaledLoaded 与 target 不一致,
             // 把按钮 IsChecked 同步回 ViewModel 的真实状态
@@ -113,6 +118,19 @@ namespace hanabimanga.Pages
                 ComicId = chapter.ComicId,
                 ChapterId = chapter.Id,
             });
+        }
+
+        private async System.Threading.Tasks.Task SaveProgressAndNotifyAsync()
+        {
+            try
+            {
+                await ViewModel.SaveCurrentProgressAsync();
+                ReadingProgressChanged?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[reader] save progress failed: {ex.Message}");
+            }
         }
     }
 }

@@ -29,6 +29,8 @@ namespace hanabimanga
         private AppWindow? _appWindow;
         private ComicDetailPage? _currentDetailPage;
         private ComicReaderPage? _currentReaderPage;
+        private RecentReadingProgress? _recentReadingProgress;
+        private bool _isContinueReadingBarDismissed;
         private int _accountRefreshVersion;
 
         private enum AuthDialogMode
@@ -45,6 +47,7 @@ namespace hanabimanga
             NavigationRoot.SelectedItem = HomeNavigationItem;
             RootFrame.Navigate(typeof(HomePage));
             UpdateAccountFooter();
+            _ = RefreshContinueReadingBarAsync();
         }
 
         private void UseGalleryStyleWindowFrame()
@@ -139,6 +142,7 @@ namespace hanabimanga
             if (_currentReaderPage != null)
             {
                 _currentReaderPage.TitleBarInfoChanged -= ReaderPage_TitleBarInfoChanged;
+                _currentReaderPage.ReadingProgressChanged -= ReaderPage_ReadingProgressChanged;
                 _currentReaderPage = null;
             }
 
@@ -152,6 +156,7 @@ namespace hanabimanga
             {
                 _currentReaderPage = readerPage;
                 _currentReaderPage.TitleBarInfoChanged += ReaderPage_TitleBarInfoChanged;
+                _currentReaderPage.ReadingProgressChanged += ReaderPage_ReadingProgressChanged;
                 ShowReaderTitleBar(readerPage);
             }
             else
@@ -161,6 +166,41 @@ namespace hanabimanga
                 {
                     NavigationRoot.SelectedItem = HomeNavigationItem;
                 }
+                else if (RootFrame.Content is DiscoverPage)
+                {
+                    NavigationRoot.SelectedItem = DiscoverNavigationItem;
+                }
+                else if (RootFrame.Content is HistoryPage)
+                {
+                    NavigationRoot.SelectedItem = HistoryNavigationItem;
+                }
+            }
+
+            _ = RefreshContinueReadingBarAsync();
+        }
+
+        private void NavigationRoot_SelectionChanged(
+            NavigationView sender,
+            NavigationViewSelectionChangedEventArgs args)
+        {
+            if (args.SelectedItem is not NavigationViewItem item ||
+                item.Tag is not string tag)
+            {
+                return;
+            }
+
+            switch (tag)
+            {
+                case "home" when RootFrame.Content is not HomePage:
+                    RootFrame.Navigate(typeof(HomePage));
+                    RootFrame.BackStack.Clear();
+                    break;
+                case "discover" when RootFrame.Content is not DiscoverPage:
+                    RootFrame.Navigate(typeof(DiscoverPage));
+                    break;
+                case "history" when RootFrame.Content is not HistoryPage:
+                    RootFrame.Navigate(typeof(HistoryPage));
+                    break;
             }
         }
 
@@ -170,6 +210,11 @@ namespace hanabimanga
             {
                 ShowReaderTitleBar(readerPage);
             }
+        }
+
+        private void ReaderPage_ReadingProgressChanged(object? sender, EventArgs e)
+        {
+            _ = RefreshContinueReadingBarAsync();
         }
 
         private void DetailPage_TitleBarInfoChanged(object? sender, EventArgs e)
@@ -243,6 +288,91 @@ namespace hanabimanga
             NavigationRoot.SelectedItem = HomeNavigationItem;
         }
 
+        private void TitleBarSearchBox_QuerySubmitted(
+            AutoSuggestBox sender,
+            AutoSuggestBoxQuerySubmittedEventArgs args)
+        {
+            var query = args.QueryText?.Trim();
+            if (string.IsNullOrWhiteSpace(query)) return;
+
+            if (RootFrame.Content is SearchPage)
+            {
+                RootFrame.Navigate(typeof(SearchPage), query);
+                return;
+            }
+
+            RootFrame.Navigate(typeof(SearchPage), query);
+        }
+
+        private async Task RefreshContinueReadingBarAsync()
+        {
+            if (_isContinueReadingBarDismissed ||
+                RootFrame.Content is not HomePage ||
+                !SupabaseService.Instance.IsInitialized ||
+                string.IsNullOrWhiteSpace(SupabaseService.Instance.CurrentSession?.AccessToken))
+            {
+                HideContinueReadingBar();
+                return;
+            }
+
+            try
+            {
+                _recentReadingProgress = await SupabaseService.Instance.GetRecentReadingProgressAsync();
+                if (_recentReadingProgress == null)
+                {
+                    HideContinueReadingBar();
+                    return;
+                }
+
+                ContinueReadingTitleTextBlock.Text = _recentReadingProgress.ComicTitle;
+                ContinueReadingSubtitleTextBlock.Text = _recentReadingProgress.ChapterTitle;
+                ContinueReadingProgressTextBlock.Text = _recentReadingProgress.ProgressText;
+                ContinueReadingCoverImage.Source = !string.IsNullOrWhiteSpace(_recentReadingProgress.CoverUrl)
+                    ? new BitmapImage(new Uri(_recentReadingProgress.CoverUrl))
+                    : null;
+                ContinueReadingBar.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[reading-history] refresh failed: {ex.Message}");
+                HideContinueReadingBar();
+            }
+        }
+
+        private void HideContinueReadingBar()
+        {
+            ContinueReadingBar.Visibility = Visibility.Collapsed;
+            ContinueReadingCoverImage.Source = null;
+        }
+
+        private void ContinueReadingButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_recentReadingProgress == null) return;
+
+            RootFrame.Navigate(typeof(ComicReaderPage), new ComicReaderNavigationParameter
+            {
+                ComicId = _recentReadingProgress.ComicId,
+                ChapterId = _recentReadingProgress.ChapterId,
+                StartPage = Math.Max(_recentReadingProgress.PageIndex, 1),
+            });
+        }
+
+        private void DismissContinueReadingBar_Click(object sender, RoutedEventArgs e)
+        {
+            _isContinueReadingBarDismissed = true;
+            HideContinueReadingBar();
+        }
+
+        private void ContinueReadingBar_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            ContinueReadingBar.Background = (Brush)Application.Current.Resources["ContinueReadingBarPointerOverBackgroundBrush"];
+        }
+
+        private void ContinueReadingBar_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            ContinueReadingBar.Background = (Brush)Application.Current.Resources["ContinueReadingBarBackgroundBrush"];
+        }
+
         private void PaneToggleButton_Click(object sender, RoutedEventArgs e)
         {
             NavigationRoot.IsPaneOpen = !NavigationRoot.IsPaneOpen;
@@ -291,6 +421,9 @@ namespace hanabimanga
             try
             {
                 await SupabaseService.Instance.SignOutAsync();
+                _recentReadingProgress = null;
+                _isContinueReadingBarDismissed = false;
+                HideContinueReadingBar();
                 UpdateAccountFooter();
             }
             catch (Exception ex)
@@ -442,7 +575,9 @@ namespace hanabimanga
 
             if (!completed) return;
 
+            _isContinueReadingBarDismissed = false;
             UpdateAccountFooter();
+            _ = RefreshContinueReadingBarAsync();
             if (mode == AuthDialogMode.SignUp)
             {
                 await ShowMessageDialogAsync("注册申请已提交", "确认邮件已经发送到你的邮箱,请完成验证后再登录。");
