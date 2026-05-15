@@ -3,14 +3,13 @@ using hanabimanga.Models;
 using hanabimanga.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace hanabimanga.Pages
 {
     public sealed partial class ComicReaderPage : Page
     {
-        private const double AutoAdvanceThreshold = 28;
-
         public ComicReaderPageViewModel ViewModel { get; } = new();
         public event EventHandler? TitleBarInfoChanged;
 
@@ -31,16 +30,16 @@ namespace hanabimanga.Pages
             TitleBarInfoChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        private void ReaderScrollViewer_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+        private void ReaderImage_ImageOpened(object sender, RoutedEventArgs e)
         {
-            if (e.IsIntermediate || ReaderScrollViewer.ScrollableHeight <= AutoAdvanceThreshold)
-                return;
+            ViewModel.OnFirstImageRendered();
+        }
 
-            var remaining = ReaderScrollViewer.ScrollableHeight - ReaderScrollViewer.VerticalOffset;
-            if (remaining <= AutoAdvanceThreshold && ViewModel.GoToNextPage())
-            {
-                ReaderScrollViewer.ChangeView(null, 0, null, true);
-            }
+        private void ReaderImage_ImageFailed(object sender, ExceptionRoutedEventArgs e)
+        {
+            // 即使加载失败也让 loading 收起,避免一直转圈
+            ViewModel.OnFirstImageRendered();
+            System.Diagnostics.Debug.WriteLine($"[reader] image failed: {e.ErrorMessage}");
         }
 
         private void PreviousChapterButton_Click(object sender, RoutedEventArgs e)
@@ -72,6 +71,18 @@ namespace hanabimanga.Pages
         private void ScrollTopButton_Click(object sender, RoutedEventArgs e)
         {
             ReaderScrollViewer.ChangeView(null, 0, null);
+        }
+
+        private void PageModeMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.SetViewMode(ReaderViewMode.Page);
+            ReaderScrollViewer.ChangeView(null, 0, null, true);
+        }
+
+        private void WaterfallModeMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            ViewModel.SetViewMode(ReaderViewMode.Waterfall);
+            ReaderScrollViewer.ChangeView(null, 0, null, true);
         }
 
         private void NavigateToChapter(ComicChapter? chapter)
