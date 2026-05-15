@@ -62,8 +62,11 @@ namespace hanabimanga
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
                 presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: true);
-                presenter.PreferredMinimumWidth = 1080;
-                presenter.PreferredMinimumHeight = 560;
+                // 单位是物理像素(非 DIP),所以在 125%/150% DPI 下实际 DIP 更小。
+                // 1280x720 = NavigationView 展开后 (320) 留 ~960 给内容,刚好
+                // 容纳 5 列新作卡片(5*184 + 4*12 = 968)和首屏推荐区 + 部分章节。
+                presenter.PreferredMinimumWidth = 1280;
+                presenter.PreferredMinimumHeight = 720;
             }
         }
 
