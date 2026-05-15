@@ -174,6 +174,14 @@ namespace hanabimanga
                 {
                     NavigationRoot.SelectedItem = HistoryNavigationItem;
                 }
+                else if (RootFrame.Content is FavoritesPage)
+                {
+                    NavigationRoot.SelectedItem = FavoritesNavigationItem;
+                }
+                else if (RootFrame.Content is LikesPage)
+                {
+                    NavigationRoot.SelectedItem = LikesNavigationItem;
+                }
             }
 
             _ = RefreshContinueReadingBarAsync();
@@ -201,7 +209,19 @@ namespace hanabimanga
                 case "history" when RootFrame.Content is not HistoryPage:
                     RootFrame.Navigate(typeof(HistoryPage));
                     break;
+                case "favorites" when RootFrame.Content is not FavoritesPage:
+                    RootFrame.Navigate(typeof(FavoritesPage));
+                    break;
+                case "likes" when RootFrame.Content is not LikesPage:
+                    RootFrame.Navigate(typeof(LikesPage));
+                    break;
             }
+        }
+
+        // 列表页(收藏 / 点赞)未登录态触发左下角账户 Flyout
+        public void ShowAccountFlyout()
+        {
+            AccountFlyout.ShowAt(AccountFooterButton);
         }
 
         private void ReaderPage_TitleBarInfoChanged(object? sender, EventArgs e)

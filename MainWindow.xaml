@@ -180,6 +180,22 @@
                         <FontIcon Glyph="&#xE81C;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="FavoritesNavigationItem"
+                    Content="收藏"
+                    Tag="favorites">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE734;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    x:Name="LikesNavigationItem"
+                    Content="点赞"
+                    Tag="likes">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE19F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
 
                 <NavigationViewItemSeparator />
                 <NavigationViewItemHeader Content="榜单" />
