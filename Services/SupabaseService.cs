@@ -61,8 +61,29 @@ namespace hanabimanga.Services
                     AutoRefreshToken = true,
                 };
 
+                // 注入文件持久化:Client.InitializeAsync 会自动 LoadSession 还原,
+                // 之后由 AutoRefreshToken 配合 SDK 内部 TokenRefresh 定时器自动续期
+                // (access_token 1h / refresh_token 90d)。
+                options.SessionHandler = new FileSessionPersistence();
+
                 var client = new Client(url, anonKey, options);
                 await client.InitializeAsync();
+
+                // 启动时主动刷新:若磁盘上的 access_token 已过期,立即用 refresh_token 换新;
+                // 若 refresh_token 也失效,SDK 会把用户登出。
+                try
+                {
+                    await client.Auth.RetrieveSessionAsync();
+                    Debug.WriteLine(
+                        client.Auth.CurrentSession is { } s
+                            ? $"[supabase] session restored, user={client.Auth.CurrentUser?.Email}, expires={s.ExpiresAt():O}"
+                            : "[supabase] no valid session after retrieve");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[supabase] RetrieveSessionAsync failed: {ex.Message}");
+                }
+
                 _client = client;
                 _supabaseUrl = url.TrimEnd('/');
                 _supabaseAnonKey = anonKey;
