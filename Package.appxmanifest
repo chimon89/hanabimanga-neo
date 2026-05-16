@@ -10,14 +10,14 @@
 
   <Identity
     Name="6902e7f5-8fd2-4cf9-918f-806999274a47"
-    Publisher="CN=chimo"
+    Publisher="CN=Chimon Technology"
     Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="6902e7f5-8fd2-4cf9-918f-806999274a47" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>hanabimanga</DisplayName>
-    <PublisherDisplayName>chimo</PublisherDisplayName>
+    <PublisherDisplayName>Chimon Technology</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 

@@ -16,13 +16,37 @@ namespace hanabimanga.ViewModels
         private readonly List<HomeFeedItem> _allRecommendedItems = new();
         private int _recommendedStartIndex;
 
+        private static readonly string[] RankingSectionIds =
+            { "popular-daily", "popular-weekly", "popular-monthly" };
+
+        private readonly List<HomeFeedItem> _rankingDaily = new();
+        private readonly List<HomeFeedItem> _rankingWeekly = new();
+        private readonly List<HomeFeedItem> _rankingMonthly = new();
+
         public ObservableCollection<HomeFeedBanner> Banners { get; } = new();
         public ObservableCollection<HomeFeedItem> RecommendedItems { get; } = new();
         public ObservableCollection<HomeFeedSection> Sections { get; } = new();
+        public ObservableCollection<HomeFeedItem> RankingItems { get; } = new();
 
         public bool HasBanners => Banners.Count > 0;
         public bool HasRecommendations => RecommendedItems.Count > 0;
         public bool CanShuffleRecommendations => _allRecommendedItems.Count > RecommendedPageSize;
+        public bool HasRanking => _rankingDaily.Count > 0
+            || _rankingWeekly.Count > 0
+            || _rankingMonthly.Count > 0;
+
+        private int _selectedRankingIndex;
+        public int SelectedRankingIndex
+        {
+            get => _selectedRankingIndex;
+            set
+            {
+                if (_selectedRankingIndex == value) return;
+                _selectedRankingIndex = value;
+                OnPropertyChanged();
+                RefreshRankingItems();
+            }
+        }
 
         private bool _isLoading;
         public bool IsLoading
@@ -80,16 +104,19 @@ namespace hanabimanga.ViewModels
                 {
                     var recommendedSection = resp.Sections.FirstOrDefault(s => s.Id == "recommended");
                     SetRecommendedItems(recommendedSection?.Items);
+                    SetRankingSections(resp.Sections);
 
                     foreach (var s in resp.Sections)
                     {
                         if (s.Id == "recommended") continue;
+                        if (RankingSectionIds.Contains(s.Id)) continue;
                         Sections.Add(s);
                     }
                 }
                 else
                 {
                     SetRecommendedItems(null);
+                    SetRankingSections(null);
                 }
             }
             catch (Exception ex)
@@ -140,6 +167,52 @@ namespace hanabimanga.ViewModels
             }
 
             OnPropertyChanged(nameof(HasRecommendations));
+        }
+
+        private void SetRankingSections(IEnumerable<HomeFeedSection>? sections)
+        {
+            _rankingDaily.Clear();
+            _rankingWeekly.Clear();
+            _rankingMonthly.Clear();
+
+            if (sections != null)
+            {
+                foreach (var s in sections)
+                {
+                    switch (s.Id)
+                    {
+                        case "popular-daily":
+                            _rankingDaily.AddRange(s.Items);
+                            break;
+                        case "popular-weekly":
+                            _rankingWeekly.AddRange(s.Items);
+                            break;
+                        case "popular-monthly":
+                            _rankingMonthly.AddRange(s.Items);
+                            break;
+                    }
+                }
+            }
+
+            _selectedRankingIndex = 0;
+            OnPropertyChanged(nameof(SelectedRankingIndex));
+            RefreshRankingItems();
+            OnPropertyChanged(nameof(HasRanking));
+        }
+
+        private void RefreshRankingItems()
+        {
+            RankingItems.Clear();
+            var source = _selectedRankingIndex switch
+            {
+                1 => _rankingWeekly,
+                2 => _rankingMonthly,
+                _ => _rankingDaily,
+            };
+            foreach (var item in source)
+            {
+                RankingItems.Add(item);
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

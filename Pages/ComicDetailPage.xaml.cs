@@ -1,3 +1,4 @@
+using System;
 using hanabimanga.Models;
 using hanabimanga.ViewModels;
 using Microsoft.UI.Xaml;
@@ -69,6 +70,20 @@ namespace hanabimanga.Pages
         private async void LikeButton_Click(object sender, RoutedEventArgs e)
         {
             await ViewModel.ToggleLikeAsync();
+        }
+
+        private async void RatingButton_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new RatingDialog(ViewModel.CurrentUserRating)
+            {
+                XamlRoot = XamlRoot,
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary && dialog.SelectedScore >= 1)
+            {
+                await ViewModel.SubmitRatingAsync(dialog.SelectedScore);
+            }
         }
 
         private void ChapterButton_Click(object sender, RoutedEventArgs e)

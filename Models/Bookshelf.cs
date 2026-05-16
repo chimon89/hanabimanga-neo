@@ -24,6 +24,7 @@ namespace hanabimanga.Models
     {
         public bool IsFavorite { get; set; }
         public bool IsLiked { get; set; }
+        public int? UserRating { get; set; }
     }
 
     internal sealed class RawComicInteractionRecord
@@ -33,5 +34,11 @@ namespace hanabimanga.Models
 
         [JsonProperty("created_at")]
         public DateTime? CreatedAt { get; set; }
+    }
+
+    internal sealed class RawComicRatingRecord
+    {
+        [JsonProperty("score")]
+        public int Score { get; set; }
     }
 }

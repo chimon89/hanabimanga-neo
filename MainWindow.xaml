@@ -173,27 +173,11 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
-                    x:Name="HistoryNavigationItem"
-                    Content="历史"
-                    Tag="history">
+                    x:Name="BookshelfNavigationItem"
+                    Content="书架"
+                    Tag="bookshelf">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE81C;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem
-                    x:Name="FavoritesNavigationItem"
-                    Content="收藏"
-                    Tag="favorites">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE734;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem
-                    x:Name="LikesNavigationItem"
-                    Content="点赞"
-                    Tag="likes">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE19F;" />
+                        <FontIcon Glyph="&#xE8F1;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
@@ -201,8 +185,8 @@
                 <NavigationViewItemHeader Content="榜单" />
 
                 <NavigationViewItem
+                    x:Name="RankingNavigationItem"
                     Content="排行"
-                    IsEnabled="False"
                     Tag="ranking">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8E5;" />
@@ -211,6 +195,90 @@
             </NavigationView.MenuItems>
 
             <NavigationView.PaneFooter>
+              <StackPanel x:Name="PaneFooterStack">
+                <Border
+                    x:Name="ContinueReadingBar"
+                    Margin="4,0,4,4"
+                    Padding="6"
+                    CornerRadius="8"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Background="{ThemeResource ContinueReadingBarBackgroundBrush}"
+                    PointerEntered="ContinueReadingBar_PointerEntered"
+                    PointerExited="ContinueReadingBar_PointerExited"
+                    Visibility="Collapsed">
+                    <Grid x:Name="ContinueReadingContentGrid" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition x:Name="ContinueReadingMiddleColumn" Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button
+                            x:Name="ContinueReadingCoverButton"
+                            Grid.Column="0"
+                            Width="36"
+                            Height="44"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="6"
+                            Click="ContinueReadingButton_Click"
+                            ToolTipService.ToolTip="继续上次阅读">
+                            <Border
+                                CornerRadius="6"
+                                Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                <Image
+                                    x:Name="ContinueReadingCoverImage"
+                                    Stretch="UniformToFill" />
+                            </Border>
+                        </Button>
+
+                        <Button
+                            x:Name="ContinueReadingTextButton"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            VerticalAlignment="Stretch"
+                            Padding="2,4"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="ContinueReadingButton_Click"
+                            ToolTipService.ToolTip="继续上次阅读">
+                            <StackPanel VerticalAlignment="Center" Spacing="1">
+                                <TextBlock
+                                    x:Name="ContinueReadingTitleTextBlock"
+                                    Text="继续阅读"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    MaxLines="1"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    x:Name="ContinueReadingSubtitleTextBlock"
+                                    Text="上次看到的位置"
+                                    FontSize="11"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    MaxLines="1"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button
+                            x:Name="ContinueReadingDismissButton"
+                            Grid.Column="2"
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            VerticalAlignment="Top"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="DismissContinueReadingBar_Click"
+                            ToolTipService.ToolTip="关闭">
+                            <FontIcon Glyph="&#xE711;" FontSize="10" />
+                        </Button>
+                    </Grid>
+                </Border>
+
                 <Button
                     x:Name="AccountFooterButton"
                     Margin="4,8,4,0"
@@ -247,27 +315,12 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <Grid>
-                                    <PersonPicture
-                                        x:Name="AccountFlyoutPersonPicture"
-                                        Width="72"
-                                        Height="72"
-                                        HorizontalAlignment="Center"
-                                        DisplayName="未登录" />
-                                    <Button
-                                        x:Name="AccountSettingsButton"
-                                        Width="40"
-                                        Height="40"
-                                        Padding="0"
-                                        HorizontalAlignment="Right"
-                                        VerticalAlignment="Top"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        IsEnabled="False"
-                                        ToolTipService.ToolTip="账户设置">
-                                        <FontIcon Glyph="&#xE713;" FontSize="18" />
-                                    </Button>
-                                </Grid>
+                                <PersonPicture
+                                    x:Name="AccountFlyoutPersonPicture"
+                                    Width="72"
+                                    Height="72"
+                                    HorizontalAlignment="Center"
+                                    DisplayName="未登录" />
 
                                 <StackPanel
                                     Grid.Row="1"
@@ -312,7 +365,8 @@
                                             BorderThickness="0"
                                             CornerRadius="6"
                                             IsEnabled="False"
-                                            Content="查看我的账户" />
+                                            Click="ViewAccountButton_Click"
+                                            Content="用户设置" />
 
                                         <StackPanel
                                             x:Name="SignedOutAccountActionsPanel"
@@ -372,10 +426,11 @@
                     </Button.Flyout>
 
                     <Grid
+                        x:Name="AccountFooterContentGrid"
                         ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="36" />
-                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="AccountFooterMiddleColumn" Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
@@ -407,6 +462,7 @@
                         </StackPanel>
 
                         <FontIcon
+                            x:Name="AccountFooterChevron"
                             Grid.Column="2"
                             Glyph="&#xE70D;"
                             FontSize="10"
@@ -414,103 +470,10 @@
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </Grid>
                 </Button>
+              </StackPanel>
             </NavigationView.PaneFooter>
 
             <Frame x:Name="RootFrame" />
         </NavigationView>
-
-        <Border
-            x:Name="ContinueReadingBar"
-            Grid.Row="1"
-            Grid.Column="0"
-            Width="520"
-            MaxWidth="620"
-            MinHeight="76"
-            Margin="0,0,56,28"
-            Padding="12"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
-            CornerRadius="8"
-            BorderThickness="1"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            Background="{ThemeResource ContinueReadingBarBackgroundBrush}"
-            PointerEntered="ContinueReadingBar_PointerEntered"
-            PointerExited="ContinueReadingBar_PointerExited"
-            Visibility="Collapsed">
-            <Grid ColumnSpacing="10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Button
-                    Grid.Column="0"
-                    Padding="10,6"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="ContinueReadingButton_Click"
-                    ToolTipService.ToolTip="继续上次阅读">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="48" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <Border
-                            Width="48"
-                            Height="56"
-                            CornerRadius="8"
-                            Background="{ThemeResource AccentFillColorTertiaryBrush}">
-                            <Image
-                                x:Name="ContinueReadingCoverImage"
-                                Stretch="UniformToFill" />
-                        </Border>
-
-                        <StackPanel
-                            Grid.Column="1"
-                            VerticalAlignment="Center"
-                            Spacing="1">
-                            <TextBlock
-                                x:Name="ContinueReadingTitleTextBlock"
-                                Text="继续阅读"
-                                FontWeight="SemiBold"
-                                MaxLines="1"
-                                TextTrimming="CharacterEllipsis" />
-                            <TextBlock
-                                x:Name="ContinueReadingSubtitleTextBlock"
-                                Text="上次看到的位置"
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                MaxLines="1"
-                                TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-
-                        <TextBlock
-                            x:Name="ContinueReadingProgressTextBlock"
-                            Grid.Column="2"
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            FontSize="12"
-                            Text="继续" />
-                    </Grid>
-                </Button>
-
-                <Button
-                    Grid.Column="1"
-                    Width="36"
-                    Height="36"
-                    Padding="0"
-                    VerticalAlignment="Center"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="DismissContinueReadingBar_Click"
-                    ToolTipService.ToolTip="关闭">
-                    <FontIcon Glyph="&#xE711;" FontSize="12" />
-                </Button>
-            </Grid>
-        </Border>
     </Grid>
 </Window>

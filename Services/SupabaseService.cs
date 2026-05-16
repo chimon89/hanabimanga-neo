@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -355,18 +356,146 @@ namespace hanabimanga.Services
             return profile;
         }
 
+        public async Task<UserSettingsDocument> GetCurrentUserSettingsAsync()
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再查看账户设置。");
+            var profileTask = GetCurrentUserProfileAsync(userId);
+            var badgesTask = GetCurrentUserBadgesAsync(userId);
+
+            await Task.WhenAll(profileTask, badgesTask);
+
+            return new UserSettingsDocument
+            {
+                Email = CurrentUser?.Email ?? "",
+                Profile = profileTask.Result ?? new UserProfile { Id = userId },
+                Badges = badgesTask.Result,
+                AvatarPresets = BuildAvatarPresetOptions(),
+            };
+        }
+
+        public async Task<UserProfile> UpdateCurrentUserProfileAsync(string username, string displayName)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再修改资料。");
+            var normalizedUsername = NormalizeOptionalProfileText(username, 32);
+            var normalizedDisplayName = NormalizeOptionalProfileText(displayName, 32);
+
+            if (normalizedUsername is { Length: < 2 })
+            {
+                throw new InvalidOperationException("用户名至少需要 2 个字符。");
+            }
+
+            await PatchCurrentUserProfileFieldsAsync(userId, new Dictionary<string, object?>
+            {
+                ["username"] = normalizedUsername,
+                ["display_name"] = normalizedDisplayName,
+            });
+
+            return await GetCurrentUserProfileAsync(userId) ?? new UserProfile { Id = userId };
+        }
+
+        public async Task<UserProfile> SetCurrentUserAvatarAsync(string avatarValue)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再修改头像。");
+            var normalizedAvatar = NormalizeOptionalProfileText(avatarValue, 512)
+                ?? "ic_avatar_default.webp";
+
+            await PatchCurrentUserProfileFieldsAsync(userId, new Dictionary<string, object?>
+            {
+                ["avatar_url"] = normalizedAvatar,
+            });
+
+            return await GetCurrentUserProfileAsync(userId) ?? new UserProfile { Id = userId };
+        }
+
+        public async Task<string> UploadCurrentUserAvatarAsync(string localFilePath)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再上传头像。");
+            if (string.IsNullOrWhiteSpace(localFilePath) || !File.Exists(localFilePath))
+            {
+                throw new InvalidOperationException("没有找到要上传的头像文件。");
+            }
+
+            var profile = await GetCurrentUserProfileAsync(userId);
+            if (profile?.VipExpirationDate is not { } vipExpiration ||
+                vipExpiration <= DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("自定义头像仅 VIP 用户可上传。");
+            }
+
+            var fileInfo = new FileInfo(localFilePath);
+            if (!string.Equals(fileInfo.Extension, ".webp", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("自定义头像目前仅支持 WebP 文件。");
+            }
+
+            if (fileInfo.Length > 2 * 1024 * 1024)
+            {
+                throw new InvalidOperationException("头像文件不能超过 2 MB。");
+            }
+
+            var bytes = await File.ReadAllBytesAsync(localFilePath);
+            var objectName = $"{userId}.webp";
+            await UploadStorageObjectAsync("avatars", objectName, bytes, "image/webp");
+
+            var publicUrl = $"{_supabaseUrl}/storage/v1/object/public/avatars/{Uri.EscapeDataString(objectName)}" +
+                $"?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+            await SetCurrentUserAvatarAsync(publicUrl);
+            return publicUrl;
+        }
+
+        public async Task SetCurrentUserBadgeDisplayedAsync(long userBadgeId, bool isDisplayed)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再编辑徽章。");
+            if (userBadgeId <= 0)
+            {
+                throw new InvalidOperationException("徽章参数无效。");
+            }
+
+            await PatchRestRecordAsync(
+                $"user_badges?id=eq.{userBadgeId}&user_id=eq.{Uri.EscapeDataString(userId)}",
+                new { is_displayed = isDisplayed });
+        }
+
+        public async Task UpdateCurrentUserEmailAsync(string email)
+        {
+            var normalized = email.Trim();
+            if (string.IsNullOrWhiteSpace(normalized) ||
+                !normalized.Contains('@') ||
+                normalized.StartsWith("@", StringComparison.Ordinal) ||
+                normalized.EndsWith("@", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("请输入有效的邮箱地址。");
+            }
+
+            GetRequiredCurrentUserId("请先登录后再变更邮箱。");
+            await Client.Auth.Update(new UserAttributes { Email = normalized });
+        }
+
+        public async Task UpdateCurrentUserPasswordAsync(string password)
+        {
+            if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+            {
+                throw new InvalidOperationException("新密码至少需要 6 个字符。");
+            }
+
+            GetRequiredCurrentUserId("请先登录后再修改密码。");
+            await Client.Auth.Update(new UserAttributes { Password = password });
+        }
+
         public async Task<ComicInteractionState> GetComicInteractionStateAsync(long comicId)
         {
             var userId = GetRequiredCurrentUserId("请先登录后再同步收藏和点赞状态。");
             var favoriteTask = HasInteractionAsync("comics_favorites", userId, comicId);
             var likeTask = HasInteractionAsync("comic_likes", userId, comicId);
+            var ratingTask = GetUserComicRatingAsync(userId, comicId);
 
-            await Task.WhenAll(favoriteTask, likeTask);
+            await Task.WhenAll(favoriteTask, likeTask, ratingTask);
 
             return new ComicInteractionState
             {
                 IsFavorite = favoriteTask.Result,
                 IsLiked = likeTask.Result,
+                UserRating = ratingTask.Result,
             };
         }
 
@@ -393,6 +522,132 @@ namespace hanabimanga.Services
             var userId = GetRequiredCurrentUserId("请先登录后再点赞漫画。");
             await SetInteractionAsync("comic_likes", userId, comicId, isLiked);
             return isLiked;
+        }
+
+        public async Task<int> SetComicRatingAsync(long comicId, int score)
+        {
+            if (score < 1 || score > 10)
+            {
+                throw new ArgumentOutOfRangeException(nameof(score), "评分必须在 1-10 之间。");
+            }
+
+            var userId = GetRequiredCurrentUserId("请先登录后再评分。");
+            var exists = await HasInteractionAsync("comic_ratings", userId, comicId);
+            if (exists)
+            {
+                await PatchRestRecordAsync(
+                    $"comic_ratings?user_id=eq.{Uri.EscapeDataString(userId)}&comic_id=eq.{comicId}",
+                    new { score, updated_at = DateTime.UtcNow });
+            }
+            else
+            {
+                await PostRestRecordAsync("comic_ratings", new
+                {
+                    user_id = userId,
+                    comic_id = comicId,
+                    score,
+                });
+            }
+
+            return score;
+        }
+
+        public async Task<(double Average, int Count)> GetComicRatingSummaryAsync(long comicId)
+        {
+            var stats = await GetSingleRestRecordAsync<RawComicRatingStats>(
+                "comics", "rating_average,rating_count", $"id=eq.{comicId}");
+            return (stats?.RatingAverage ?? 0, stats?.RatingCount ?? 0);
+        }
+
+        private async Task<int?> GetUserComicRatingAsync(string userId, long comicId)
+        {
+            var rows = await GetAuthenticatedRestRecordsAsync<RawComicRatingRecord>(
+                $"comic_ratings?select=score&user_id=eq.{Uri.EscapeDataString(userId)}&comic_id=eq.{comicId}&limit=1");
+            return rows.Count > 0 ? rows[0].Score : null;
+        }
+
+        private async Task<List<UserBadgeItem>> GetCurrentUserBadgesAsync(string userId)
+        {
+            var rows = await GetAuthenticatedRestRecordsAsync<RawUserBadgeRecord>(
+                "user_badges?select=id,badge_id,is_displayed,expires_at" +
+                $"&user_id=eq.{Uri.EscapeDataString(userId)}&order=created_at.desc&limit=200");
+
+            if (rows.Count == 0)
+            {
+                return new List<UserBadgeItem>();
+            }
+
+            var badgeIds = rows
+                .Select(row => row.BadgeId)
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+            var definitions = badgeIds.Count == 0
+                ? new Dictionary<long, RawBadgeDefinitionRecord>()
+                : (await GetRestRecordsAsync<RawBadgeDefinitionRecord>(
+                    "badge_definitions?select=id,name,description,image_url" +
+                    $"&id=in.({string.Join(",", badgeIds)})"))
+                    .ToDictionary(definition => definition.Id);
+
+            return rows
+                .Select(row =>
+                {
+                    definitions.TryGetValue(row.BadgeId, out var definition);
+                    return new UserBadgeItem
+                    {
+                        Id = row.Id,
+                        BadgeId = row.BadgeId,
+                        Name = string.IsNullOrWhiteSpace(definition?.Name)
+                            ? $"徽章 #{row.BadgeId}"
+                            : definition!.Name!,
+                        Description = definition?.Description,
+                        ImageUrl = definition?.ImageUrl,
+                        IsDisplayed = row.IsDisplayed,
+                        ExpiresAt = row.ExpiresAt,
+                    };
+                })
+                .ToList();
+        }
+
+        private async Task PatchCurrentUserProfileFieldsAsync(
+            string userId,
+            Dictionary<string, object?> fields)
+        {
+            fields["updated_at"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            await PatchRestRecordAsync(
+                $"profiles?id=eq.{Uri.EscapeDataString(userId)}",
+                fields);
+        }
+
+        private static string? NormalizeOptionalProfileText(string value, int maxLength)
+        {
+            var normalized = value.Trim();
+            if (string.IsNullOrWhiteSpace(normalized)) return null;
+            if (normalized.Length > maxLength)
+            {
+                throw new InvalidOperationException($"输入内容不能超过 {maxLength} 个字符。");
+            }
+
+            return normalized;
+        }
+
+        private static List<AvatarPresetOption> BuildAvatarPresetOptions()
+        {
+            var items = new List<AvatarPresetOption>
+            {
+                new() { FileName = "ic_avatar_default.webp", Label = "默认头像" },
+            };
+
+            for (var i = 1; i <= 15; i++)
+            {
+                items.Add(new AvatarPresetOption
+                {
+                    FileName = $"ic_avatar_{i:00}.webp",
+                    Label = $"预设头像 {i:00}",
+                });
+            }
+
+            return items;
         }
 
         public async Task<BookshelfDocument> GetBookshelfAsync()
@@ -464,6 +719,42 @@ namespace hanabimanga.Services
                     return item;
                 })
                 .ToList();
+        }
+
+        public async Task<List<RankingComicItem>> GetRankingComicsAsync(RankingKind kind, int limit = 30)
+        {
+            var orderColumn = kind switch
+            {
+                RankingKind.Daily => "popularity_daily",
+                RankingKind.Weekly => "popularity_weekly",
+                RankingKind.Monthly => "popularity_monthly",
+                RankingKind.Rating => "rating_average",
+                RankingKind.RatingCount => "rating_count",
+                _ => "popularity_daily",
+            };
+
+            const string select = "id,title,cover_url,is_finished,rating_average,rating_count," +
+                "popularity_daily,popularity_weekly,popularity_monthly";
+            var safeLimit = Math.Clamp(limit, 1, 100);
+
+            // slug 非空 = 已正式上架(与 count_comics_by_category 的过滤口径一致)
+            var path = $"comics?select={select}&slug=not.is.null" +
+                $"&order={orderColumn}.desc.nullslast&limit={safeLimit}";
+
+            // 评分榜额外要求评分人数达到阈值,避免「1 个满分」霸榜
+            if (kind == RankingKind.Rating)
+            {
+                path += $"&rating_count=gte.{MinRatingsForRatingBoard}";
+            }
+
+            var records = await GetRestRecordsAsync<RawRankingComicRecord>(path);
+            var items = new List<RankingComicItem>();
+            var rank = 1;
+            foreach (var record in records)
+            {
+                items.Add(MapRankingItem(record, kind, rank++));
+            }
+            return items;
         }
 
         public async Task<RecentReadingProgress?> GetRecentReadingProgressAsync()
@@ -1027,12 +1318,44 @@ namespace hanabimanga.Services
             return JsonConvert.DeserializeObject<T>(body);
         }
 
+        private async Task UploadStorageObjectAsync(
+            string bucket,
+            string objectName,
+            byte[] data,
+            string contentType)
+        {
+            if (string.IsNullOrWhiteSpace(_supabaseUrl) || string.IsNullOrWhiteSpace(_supabaseAnonKey))
+            {
+                throw new InvalidOperationException("SupabaseService 尚未初始化,无法上传文件。");
+            }
+
+            var token = GetRequiredAccessToken();
+            var requestUri = $"{_supabaseUrl}/storage/v1/object/{Uri.EscapeDataString(bucket)}/{Uri.EscapeDataString(objectName)}";
+            using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
+            request.Headers.TryAddWithoutValidation("apikey", _supabaseAnonKey);
+            request.Headers.TryAddWithoutValidation("x-upsert", "true");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Content = new ByteArrayContent(data);
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            request.Content.Headers.ContentLength = data.Length;
+
+            using var response = await _httpClient.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+            Debug.WriteLine($"[supabase-storage] upload {bucket}/{objectName}: {(int)response.StatusCode}\n{body}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Supabase Storage 上传失败: {(int)response.StatusCode} {response.ReasonPhrase} {body}");
+            }
+        }
+
         private string GetRequiredAccessToken()
         {
             var token = CurrentSession?.AccessToken;
             if (string.IsNullOrWhiteSpace(token))
             {
-                throw new InvalidOperationException("请先登录后再使用书架、收藏和点赞。");
+                throw new InvalidOperationException("请先登录后再使用需要账户同步的功能。");
             }
 
             return token;
@@ -1155,6 +1478,30 @@ namespace hanabimanga.Services
                 Title = record.Title ?? "",
                 Subtitle = $"{status} · {chapters} · {rating}",
                 CoverUrl = record.CoverUrl,
+            };
+        }
+
+        private const int MinRatingsForRatingBoard = 10;
+
+        private static RankingComicItem MapRankingItem(RawRankingComicRecord record, RankingKind kind, int rank)
+        {
+            var subtitle = kind switch
+            {
+                RankingKind.Daily => $"日人气 {record.PopularityDaily ?? 0}",
+                RankingKind.Weekly => $"周人气 {record.PopularityWeekly ?? 0}",
+                RankingKind.Monthly => $"月人气 {record.PopularityMonthly ?? 0}",
+                RankingKind.Rating => $"评分 {record.RatingAverage ?? 0:0.0} · {record.RatingCount ?? 0} 人",
+                RankingKind.RatingCount => $"{record.RatingCount ?? 0} 人评分",
+                _ => "",
+            };
+
+            return new RankingComicItem
+            {
+                Rank = rank,
+                Id = record.Id.ToString(CultureInfo.InvariantCulture),
+                Title = record.Title ?? "",
+                CoverUrl = record.CoverUrl,
+                Subtitle = subtitle,
             };
         }
 

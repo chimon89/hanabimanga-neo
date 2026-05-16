@@ -197,10 +197,14 @@
                                 <TextBlock Text="{x:Bind ViewModel.LikeButtonText, Mode=OneWay}" />
                             </StackPanel>
                         </Button>
-                        <Button Padding="12,6">
+                        <Button
+                            x:Name="RatingButton"
+                            Padding="12,6"
+                            Click="RatingButton_Click"
+                            IsEnabled="{x:Bind ViewModel.IsInteractionEnabled, Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE735;" FontSize="13" />
-                                <TextBlock Text="评分" />
+                                <TextBlock Text="{x:Bind ViewModel.RatingButtonText, Mode=OneWay}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

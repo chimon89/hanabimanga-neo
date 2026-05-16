@@ -1,0 +1,507 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="hanabimanga.Pages.BookshelfPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:hanabimanga.Converters"
+    xmlns:models="using:hanabimanga.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <converters:StringToImageSourceConverter x:Key="StringToImageSource" />
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+    </Page.Resources>
+
+    <Grid>
+        <ScrollViewer
+            x:Name="BookshelfScrollViewer"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <Grid
+                Width="{Binding ElementName=BookshelfScrollViewer, Path=ViewportWidth}"
+                MinHeight="{Binding ElementName=BookshelfScrollViewer, Path=ViewportHeight}"
+                MaxWidth="1180"
+                Padding="32,18,32,32"
+                HorizontalAlignment="Center"
+                RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel MinWidth="0" Spacing="4">
+                        <TextBlock
+                            Text="书架"
+                            FontSize="28"
+                            FontWeight="SemiBold" />
+                        <TextBlock
+                            Text="你的阅读历史、收藏与点赞"
+                            TextWrapping="Wrap"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+
+                    <Button
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Padding="12,6"
+                        Click="RefreshButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE72C;" FontSize="13" />
+                            <TextBlock Text="刷新" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <SelectorBar
+                    x:Name="BookshelfSelector"
+                    Grid.Row="1"
+                    SelectionChanged="BookshelfSelector_SelectionChanged">
+                    <SelectorBarItem x:Name="HistorySelectorItem" Text="历史" />
+                    <SelectorBarItem x:Name="FavoritesSelectorItem" Text="收藏" />
+                    <SelectorBarItem x:Name="LikesSelectorItem" Text="点赞" />
+                </SelectorBar>
+
+                <!-- 历史面板 -->
+                <Grid
+                    Grid.Row="2"
+                    RowSpacing="18"
+                    Visibility="{x:Bind ViewModel.IsHistorySelected, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <ProgressRing
+                        Grid.Row="0"
+                        IsActive="{x:Bind ViewModel.History.IsLoading, Mode=OneWay}"
+                        HorizontalAlignment="Left"
+                        Visibility="{x:Bind ViewModel.History.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                    <InfoBar
+                        Grid.Row="1"
+                        IsClosable="False"
+                        Severity="Error"
+                        IsOpen="{x:Bind ViewModel.History.HasError, Mode=OneWay}"
+                        Title="历史加载失败"
+                        Message="{x:Bind ViewModel.History.ErrorMessage, Mode=OneWay}" />
+
+                    <Grid
+                        Grid.Row="2"
+                        MinHeight="360"
+                        MinWidth="0"
+                        HorizontalAlignment="Stretch">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock
+                            Grid.Row="0"
+                            Margin="0,0,0,16"
+                            Text="{x:Bind ViewModel.History.Summary, Mode=OneWay}"
+                            TextWrapping="Wrap"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Visibility="{x:Bind ViewModel.History.HasItems, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                        <Grid
+                            Grid.Row="1"
+                            MinWidth="0"
+                            HorizontalAlignment="Stretch">
+                        <ItemsRepeater
+                            MinWidth="0"
+                            HorizontalAlignment="Stretch"
+                            ItemsSource="{x:Bind ViewModel.History.Items, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.History.HasItems, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout
+                                    ItemsJustification="Start"
+                                    ItemsStretch="Fill"
+                                    MinColumnSpacing="12"
+                                    MinRowSpacing="14"
+                                    MinItemWidth="170"
+                                    MinItemHeight="320" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:ComicListItem">
+                                    <Button
+                                        HorizontalAlignment="Stretch"
+                                        Padding="10"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="10"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        Click="HistoryItem_Click"
+                                        Tag="{x:Bind ReaderKey}"
+                                        ToolTipService.ToolTip="{x:Bind Title}">
+                                        <Grid HorizontalAlignment="Stretch">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="226" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+
+                                            <Border
+                                                Grid.Row="0"
+                                                CornerRadius="8"
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                                <Image
+                                                    Source="{x:Bind CoverUrl, Converter={StaticResource StringToImageSource}}"
+                                                    Stretch="UniformToFill" />
+                                            </Border>
+
+                                            <TextBlock
+                                                Grid.Row="1"
+                                                Text="{x:Bind Title}"
+                                                FontWeight="SemiBold"
+                                                LineHeight="20"
+                                                Height="40"
+                                                Margin="2,8,2,0"
+                                                MaxLines="2"
+                                                TextWrapping="Wrap"
+                                                TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock
+                                                Grid.Row="2"
+                                                Text="{x:Bind Subtitle}"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Margin="2,4,2,0"
+                                                MaxLines="1"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12"
+                            Visibility="{x:Bind ViewModel.History.NeedsSignIn, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                FontSize="40"
+                                Glyph="&#xE81C;"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.History.SignInHint}"
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Button
+                                HorizontalAlignment="Center"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="SignIn_Click">
+                                <TextBlock Text="去登录" />
+                            </Button>
+                        </StackPanel>
+
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8"
+                            Visibility="{x:Bind ViewModel.History.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                Glyph="&#xE81C;"
+                                FontSize="40"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                Text="还没有阅读历史"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Grid>
+
+                <!-- 收藏面板 -->
+                <Grid
+                    Grid.Row="2"
+                    RowSpacing="18"
+                    Visibility="{x:Bind ViewModel.IsFavoritesSelected, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <ProgressRing
+                        Grid.Row="0"
+                        IsActive="{x:Bind ViewModel.Favorites.IsLoading, Mode=OneWay}"
+                        HorizontalAlignment="Left"
+                        Visibility="{x:Bind ViewModel.Favorites.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                    <InfoBar
+                        Grid.Row="1"
+                        IsClosable="False"
+                        Severity="Error"
+                        IsOpen="{x:Bind ViewModel.Favorites.HasError, Mode=OneWay}"
+                        Title="加载失败"
+                        Message="{x:Bind ViewModel.Favorites.ErrorMessage, Mode=OneWay}" />
+
+                    <Grid
+                        Grid.Row="2"
+                        MinHeight="360"
+                        HorizontalAlignment="Stretch">
+                        <ItemsRepeater
+                            HorizontalAlignment="Stretch"
+                            ItemsSource="{x:Bind ViewModel.Favorites.Items, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.Favorites.HasContent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout
+                                    ItemsJustification="Start"
+                                    ItemsStretch="Fill"
+                                    MinColumnSpacing="12"
+                                    MinRowSpacing="14"
+                                    MinItemWidth="170"
+                                    MinItemHeight="320" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookshelfComicItem">
+                                    <Button
+                                        HorizontalAlignment="Stretch"
+                                        Padding="10"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="10"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        Click="ComicItem_Click"
+                                        Tag="{x:Bind Id}"
+                                        ToolTipService.ToolTip="{x:Bind Title}">
+                                        <Grid HorizontalAlignment="Stretch">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="226" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+
+                                            <Border
+                                                Grid.Row="0"
+                                                CornerRadius="8"
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                                <Image
+                                                    Source="{x:Bind CoverUrl, Converter={StaticResource StringToImageSource}}"
+                                                    Stretch="UniformToFill" />
+                                            </Border>
+
+                                            <TextBlock
+                                                Grid.Row="1"
+                                                Text="{x:Bind Title}"
+                                                FontWeight="SemiBold"
+                                                LineHeight="20"
+                                                Height="40"
+                                                Margin="2,8,2,0"
+                                                MaxLines="2"
+                                                TextWrapping="Wrap"
+                                                TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock
+                                                Grid.Row="2"
+                                                Text="{x:Bind Subtitle}"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Margin="2,4,2,0"
+                                                MaxLines="1"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12"
+                            Visibility="{x:Bind ViewModel.Favorites.NeedsSignIn, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                FontSize="40"
+                                Glyph="&#xE734;"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.Favorites.SignInHint}"
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Button
+                                HorizontalAlignment="Center"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="SignIn_Click">
+                                <TextBlock Text="去登录" />
+                            </Button>
+                        </StackPanel>
+
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8"
+                            Visibility="{x:Bind ViewModel.Favorites.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                FontSize="40"
+                                Glyph="&#xE734;"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.Favorites.EmptyHint}"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <!-- 点赞面板 -->
+                <Grid
+                    Grid.Row="2"
+                    RowSpacing="18"
+                    Visibility="{x:Bind ViewModel.IsLikesSelected, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <ProgressRing
+                        Grid.Row="0"
+                        IsActive="{x:Bind ViewModel.Likes.IsLoading, Mode=OneWay}"
+                        HorizontalAlignment="Left"
+                        Visibility="{x:Bind ViewModel.Likes.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                    <InfoBar
+                        Grid.Row="1"
+                        IsClosable="False"
+                        Severity="Error"
+                        IsOpen="{x:Bind ViewModel.Likes.HasError, Mode=OneWay}"
+                        Title="加载失败"
+                        Message="{x:Bind ViewModel.Likes.ErrorMessage, Mode=OneWay}" />
+
+                    <Grid
+                        Grid.Row="2"
+                        MinHeight="360"
+                        HorizontalAlignment="Stretch">
+                        <ItemsRepeater
+                            HorizontalAlignment="Stretch"
+                            ItemsSource="{x:Bind ViewModel.Likes.Items, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.Likes.HasContent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout
+                                    ItemsJustification="Start"
+                                    ItemsStretch="Fill"
+                                    MinColumnSpacing="12"
+                                    MinRowSpacing="14"
+                                    MinItemWidth="170"
+                                    MinItemHeight="320" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookshelfComicItem">
+                                    <Button
+                                        HorizontalAlignment="Stretch"
+                                        Padding="10"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="10"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        Click="ComicItem_Click"
+                                        Tag="{x:Bind Id}"
+                                        ToolTipService.ToolTip="{x:Bind Title}">
+                                        <Grid HorizontalAlignment="Stretch">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="226" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+
+                                            <Border
+                                                Grid.Row="0"
+                                                CornerRadius="8"
+                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                                <Image
+                                                    Source="{x:Bind CoverUrl, Converter={StaticResource StringToImageSource}}"
+                                                    Stretch="UniformToFill" />
+                                            </Border>
+
+                                            <TextBlock
+                                                Grid.Row="1"
+                                                Text="{x:Bind Title}"
+                                                FontWeight="SemiBold"
+                                                LineHeight="20"
+                                                Height="40"
+                                                Margin="2,8,2,0"
+                                                MaxLines="2"
+                                                TextWrapping="Wrap"
+                                                TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock
+                                                Grid.Row="2"
+                                                Text="{x:Bind Subtitle}"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Margin="2,4,2,0"
+                                                MaxLines="1"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="12"
+                            Visibility="{x:Bind ViewModel.Likes.NeedsSignIn, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                FontSize="40"
+                                Glyph="&#xE19F;"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.Likes.SignInHint}"
+                                HorizontalAlignment="Center"
+                                FontSize="14"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <Button
+                                HorizontalAlignment="Center"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="SignIn_Click">
+                                <TextBlock Text="去登录" />
+                            </Button>
+                        </StackPanel>
+
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8"
+                            Visibility="{x:Bind ViewModel.Likes.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <FontIcon
+                                HorizontalAlignment="Center"
+                                FontSize="40"
+                                Glyph="&#xE19F;"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                Text="{x:Bind ViewModel.Likes.EmptyHint}"
+                                HorizontalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Page>

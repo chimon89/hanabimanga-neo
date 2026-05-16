@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -31,6 +32,7 @@ namespace hanabimanga
         private ComicReaderPage? _currentReaderPage;
         private RecentReadingProgress? _recentReadingProgress;
         private bool _isContinueReadingBarDismissed;
+        private bool _paneFooterCompact;
         private int _accountRefreshVersion;
 
         private enum AuthDialogMode
@@ -38,6 +40,9 @@ namespace hanabimanga
             SignIn,
             SignUp,
         }
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
 
         public MainWindow()
         {
@@ -65,11 +70,13 @@ namespace hanabimanga
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
                 presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: true);
-                // 单位是物理像素(非 DIP),所以在 125%/150% DPI 下实际 DIP 更小。
-                // 1280x720 = NavigationView 展开后 (320) 留 ~960 给内容,刚好
-                // 容纳 5 列新作卡片(5*184 + 4*12 = 968)和首屏推荐区 + 部分章节。
-                presenter.PreferredMinimumWidth = 1280;
-                presenter.PreferredMinimumHeight = 720;
+                // PreferredMinimum* 单位是物理像素(非 DIP),按窗口 DPI 缩放,
+                // 这样在 125%/150% 缩放下最小尺寸的有效 DIP 仍为 1280x720,
+                // 避免窗口被缩到内容区放不下、提示被裁切。
+                var dpi = GetDpiForWindow(windowHandle);
+                var scale = dpi > 0 ? dpi / 96.0 : 1.0;
+                presenter.PreferredMinimumWidth = (int)Math.Round(1280 * scale);
+                presenter.PreferredMinimumHeight = (int)Math.Round(720 * scale);
             }
         }
 
@@ -170,17 +177,17 @@ namespace hanabimanga
                 {
                     NavigationRoot.SelectedItem = DiscoverNavigationItem;
                 }
-                else if (RootFrame.Content is HistoryPage)
+                else if (RootFrame.Content is BookshelfPage)
                 {
-                    NavigationRoot.SelectedItem = HistoryNavigationItem;
+                    NavigationRoot.SelectedItem = BookshelfNavigationItem;
                 }
-                else if (RootFrame.Content is FavoritesPage)
+                else if (RootFrame.Content is RankingPage)
                 {
-                    NavigationRoot.SelectedItem = FavoritesNavigationItem;
+                    NavigationRoot.SelectedItem = RankingNavigationItem;
                 }
-                else if (RootFrame.Content is LikesPage)
+                else if (RootFrame.Content is UserSettingsPage)
                 {
-                    NavigationRoot.SelectedItem = LikesNavigationItem;
+                    NavigationRoot.SelectedItem = null;
                 }
             }
 
@@ -206,14 +213,11 @@ namespace hanabimanga
                 case "discover" when RootFrame.Content is not DiscoverPage:
                     RootFrame.Navigate(typeof(DiscoverPage));
                     break;
-                case "history" when RootFrame.Content is not HistoryPage:
-                    RootFrame.Navigate(typeof(HistoryPage));
+                case "bookshelf" when RootFrame.Content is not BookshelfPage:
+                    RootFrame.Navigate(typeof(BookshelfPage));
                     break;
-                case "favorites" when RootFrame.Content is not FavoritesPage:
-                    RootFrame.Navigate(typeof(FavoritesPage));
-                    break;
-                case "likes" when RootFrame.Content is not LikesPage:
-                    RootFrame.Navigate(typeof(LikesPage));
+                case "ranking" when RootFrame.Content is not RankingPage:
+                    RootFrame.Navigate(typeof(RankingPage));
                     break;
             }
         }
@@ -222,6 +226,11 @@ namespace hanabimanga
         public void ShowAccountFlyout()
         {
             AccountFlyout.ShowAt(AccountFooterButton);
+        }
+
+        public void RefreshAccountDisplay()
+        {
+            UpdateAccountFooter();
         }
 
         private void ReaderPage_TitleBarInfoChanged(object? sender, EventArgs e)
@@ -327,7 +336,7 @@ namespace hanabimanga
         private async Task RefreshContinueReadingBarAsync()
         {
             if (_isContinueReadingBarDismissed ||
-                RootFrame.Content is not HomePage ||
+                RootFrame.Content is ComicReaderPage ||
                 !SupabaseService.Instance.IsInitialized ||
                 string.IsNullOrWhiteSpace(SupabaseService.Instance.CurrentSession?.AccessToken))
             {
@@ -345,12 +354,14 @@ namespace hanabimanga
                 }
 
                 ContinueReadingTitleTextBlock.Text = _recentReadingProgress.ComicTitle;
-                ContinueReadingSubtitleTextBlock.Text = _recentReadingProgress.ChapterTitle;
-                ContinueReadingProgressTextBlock.Text = _recentReadingProgress.ProgressText;
+                ContinueReadingSubtitleTextBlock.Text = string.IsNullOrWhiteSpace(_recentReadingProgress.ProgressText)
+                    ? _recentReadingProgress.ChapterTitle
+                    : $"{_recentReadingProgress.ChapterTitle} · {_recentReadingProgress.ProgressText}";
                 ContinueReadingCoverImage.Source = !string.IsNullOrWhiteSpace(_recentReadingProgress.CoverUrl)
                     ? new BitmapImage(new Uri(_recentReadingProgress.CoverUrl))
                     : null;
                 ContinueReadingBar.Visibility = Visibility.Visible;
+                UpdatePaneFooterLayout();
             }
             catch (Exception ex)
             {
@@ -385,28 +396,30 @@ namespace hanabimanga
 
         private void ContinueReadingBar_PointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
+            if (_paneFooterCompact) return;
             ContinueReadingBar.Background = (Brush)Application.Current.Resources["ContinueReadingBarPointerOverBackgroundBrush"];
         }
 
         private void ContinueReadingBar_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
+            if (_paneFooterCompact) return;
             ContinueReadingBar.Background = (Brush)Application.Current.Resources["ContinueReadingBarBackgroundBrush"];
         }
 
         private void PaneToggleButton_Click(object sender, RoutedEventArgs e)
         {
             NavigationRoot.IsPaneOpen = !NavigationRoot.IsPaneOpen;
-            UpdateAccountFooterForPaneState();
+            UpdatePaneFooterLayout();
         }
 
         private void NavigationRoot_DisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
         {
-            UpdateAccountFooterForPaneState();
+            UpdatePaneFooterLayout();
         }
 
         private void AccountFooterButton_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            UpdateAccountFooterForPaneState();
+            UpdatePaneFooterLayout();
         }
 
         private async void SignInMenuButton_Click(object sender, RoutedEventArgs e)
@@ -425,6 +438,20 @@ namespace hanabimanga
         {
             AccountFlyout.Hide();
             await ShowMagicLinkDialogAsync();
+        }
+
+        private void ViewAccountButton_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateUserSettings();
+        }
+
+        private void NavigateUserSettings()
+        {
+            AccountFlyout.Hide();
+            if (RootFrame.Content is not UserSettingsPage)
+            {
+                RootFrame.Navigate(typeof(UserSettingsPage));
+            }
         }
 
         private async void SignOutMenuButton_Click(object sender, RoutedEventArgs e)
@@ -689,8 +716,7 @@ namespace hanabimanga
 
             SignedOutAccountActionsPanel.Visibility = isSignedIn ? Visibility.Collapsed : Visibility.Visible;
             SignedInAccountActionsPanel.Visibility = isSignedIn ? Visibility.Visible : Visibility.Collapsed;
-            ViewAccountButton.IsEnabled = false;
-            AccountSettingsButton.IsEnabled = false;
+            ViewAccountButton.IsEnabled = isSignedIn;
 
             if (isSignedIn)
             {
@@ -714,18 +740,55 @@ namespace hanabimanga
                 AccountFlyoutPersonPicture.DisplayName = "";
             }
 
-            UpdateAccountFooterForPaneState();
+            UpdatePaneFooterLayout();
         }
 
-        private void UpdateAccountFooterForPaneState()
+        private void UpdatePaneFooterLayout()
         {
-            var hasFullPaneWidth =
-                NavigationRoot.DisplayMode == NavigationViewDisplayMode.Expanded ||
-                AccountFooterButton.ActualWidth >= 180;
+            var compact = !NavigationRoot.IsPaneOpen;
+            _paneFooterCompact = compact;
 
-            AccountFooterDetailsPanel.Visibility = hasFullPaneWidth ? Visibility.Visible : Visibility.Collapsed;
-            AccountFooterButton.Padding = hasFullPaneWidth
-                ? new Thickness(8, 6, 8, 6)
+            PaneFooterStack.Width = compact ? NavigationRoot.CompactPaneLength : double.NaN;
+
+            AccountFooterDetailsPanel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            AccountFooterChevron.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            AccountFooterContentGrid.ColumnSpacing = compact ? 0 : 12;
+            AccountFooterMiddleColumn.Width = compact
+                ? new GridLength(0)
+                : new GridLength(1, GridUnitType.Star);
+            AccountFooterButton.HorizontalAlignment = compact
+                ? HorizontalAlignment.Center
+                : HorizontalAlignment.Stretch;
+            AccountFooterButton.HorizontalContentAlignment = compact
+                ? HorizontalAlignment.Center
+                : HorizontalAlignment.Stretch;
+            AccountFooterButton.Margin = compact
+                ? new Thickness(0, 8, 0, 0)
+                : new Thickness(4, 8, 4, 0);
+            AccountFooterButton.Padding = compact
+                ? new Thickness(2)
+                : new Thickness(8, 6, 8, 6);
+
+            ContinueReadingTextButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ContinueReadingDismissButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+            ContinueReadingContentGrid.ColumnSpacing = compact ? 0 : 8;
+            ContinueReadingMiddleColumn.Width = compact
+                ? new GridLength(0)
+                : new GridLength(1, GridUnitType.Star);
+            ContinueReadingBar.HorizontalAlignment = compact
+                ? HorizontalAlignment.Center
+                : HorizontalAlignment.Stretch;
+            ContinueReadingBar.Margin = compact
+                ? new Thickness(0, 0, 0, 4)
+                : new Thickness(4, 0, 4, 4);
+            ContinueReadingBar.BorderThickness = compact
+                ? new Thickness(0)
+                : new Thickness(1);
+            ContinueReadingBar.Background = compact
+                ? null
+                : (Brush)Application.Current.Resources["ContinueReadingBarBackgroundBrush"];
+            ContinueReadingBar.Padding = compact
+                ? new Thickness(0)
                 : new Thickness(6);
         }
 

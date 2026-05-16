@@ -18,6 +18,17 @@ namespace hanabimanga.Pages
         public HomePage()
         {
             InitializeComponent();
+            RankingSelector.SelectedItem = RankingDailyItem;
+        }
+
+        private void RankingSelector_SelectionChanged(
+            SelectorBar sender,
+            SelectorBarSelectionChangedEventArgs args)
+        {
+            var index = sender.Items.IndexOf(sender.SelectedItem);
+            if (index < 0) return;
+
+            ViewModel.SelectedRankingIndex = index;
         }
 
         protected override async void OnNavigatedTo(NavigationEventArgs e)

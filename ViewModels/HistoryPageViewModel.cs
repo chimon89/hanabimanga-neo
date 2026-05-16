@@ -24,6 +24,7 @@ namespace hanabimanga.ViewModels
                 _isLoading = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsEmpty));
+                OnPropertyChanged(nameof(NeedsSignIn));
             }
         }
 
@@ -41,14 +42,38 @@ namespace hanabimanga.ViewModels
 
         public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
         public bool HasItems => Items.Count > 0;
-        public bool IsEmpty => !IsLoading && !HasItems && !HasError;
-        public string Summary => HasItems ? $"共 {Items.Count} 条阅读记录" : "最近阅读的章节会显示在这里";
+
+        public bool IsLoggedIn => SupabaseService.Instance.IsInitialized
+            && SupabaseService.Instance.CurrentUser is not null;
+
+        public bool NeedsSignIn => !IsLoading && !IsLoggedIn;
+
+        public bool IsEmpty => !IsLoading && IsLoggedIn && !HasItems && !HasError;
+
+        public string SignInHint => "登录后查看你的阅读历史";
+
+        public string Summary => !IsLoggedIn
+            ? string.Empty
+            : HasItems ? $"共 {Items.Count} 条阅读记录" : "最近阅读的章节会显示在这里";
 
         public async Task LoadAsync()
         {
+            OnPropertyChanged(nameof(IsLoggedIn));
+            OnPropertyChanged(nameof(NeedsSignIn));
+
             if (!SupabaseService.Instance.IsInitialized)
             {
                 ErrorMessage = "Supabase 未初始化:请检查 appsettings.local.json 中的 Url / AnonKey。";
+                return;
+            }
+
+            if (SupabaseService.Instance.CurrentUser?.Id is not { Length: > 0 })
+            {
+                Items.Clear();
+                ErrorMessage = null;
+                RefreshItemProperties();
+                OnPropertyChanged(nameof(IsLoggedIn));
+                OnPropertyChanged(nameof(NeedsSignIn));
                 return;
             }
 

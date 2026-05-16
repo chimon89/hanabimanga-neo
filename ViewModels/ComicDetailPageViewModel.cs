@@ -23,6 +23,7 @@ namespace hanabimanga.ViewModels
         private bool _isInteractionBusy;
         private bool _isFavorite;
         private bool _isLiked;
+        private int? _userRating;
         private string? _errorMessage;
         private string _errorTitle = "加载失败";
 
@@ -109,6 +110,20 @@ namespace hanabimanga.ViewModels
             }
         }
 
+        public int? UserRating
+        {
+            get => _userRating;
+            private set
+            {
+                if (_userRating == value) return;
+                _userRating = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RatingButtonText));
+            }
+        }
+
+        public int? CurrentUserRating => _userRating;
+
         public string Title => _detail?.Title ?? "漫画详情";
         public string CategoryName => _detail?.CategoryName ?? "漫画";
         public string CoverUrl => _detail?.CoverUrl ?? "";
@@ -125,6 +140,7 @@ namespace hanabimanga.ViewModels
         public string LatestText => BuildLatestText();
         public string FavoriteButtonText => IsFavorite ? "已收藏" : "收藏";
         public string LikeButtonText => IsLiked ? "已点赞" : "点赞";
+        public string RatingButtonText => _userRating is { } r ? $"已评 {r} 分" : "评分";
         public string FavoriteIconGlyph => IsFavorite ? "\uE735" : "\uE734";
         public string LikeIconGlyph => IsLiked ? "\uE8E1" : "\uE8E3";
 
@@ -218,18 +234,47 @@ namespace hanabimanga.ViewModels
             }
         }
 
+        public async Task SubmitRatingAsync(int score)
+        {
+            if (_detail == null || IsInteractionBusy) return;
+
+            IsInteractionBusy = true;
+            ErrorTitle = "评分失败";
+            ErrorMessage = null;
+            try
+            {
+                await SupabaseService.Instance.SetComicRatingAsync(_detail.Id, score);
+                UserRating = score;
+
+                var (average, count) = await SupabaseService.Instance.GetComicRatingSummaryAsync(_detail.Id);
+                _detail.RatingAverage = average;
+                _detail.RatingCount = count;
+                OnPropertyChanged(nameof(RatingText));
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"评分操作失败:{ex.Message}";
+            }
+            finally
+            {
+                IsInteractionBusy = false;
+            }
+        }
+
         private async Task RefreshInteractionStateAsync()
         {
             if (_detail == null)
             {
                 IsFavorite = false;
                 IsLiked = false;
+                UserRating = null;
                 return;
             }
 
             var state = await SupabaseService.Instance.TryGetComicInteractionStateAsync(_detail.Id);
             IsFavorite = state.IsFavorite;
             IsLiked = state.IsLiked;
+            UserRating = state.UserRating;
         }
 
         public void SelectCategory(string category)
@@ -505,6 +550,7 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(ErrorTitle));
             OnPropertyChanged(nameof(FavoriteButtonText));
             OnPropertyChanged(nameof(LikeButtonText));
+            OnPropertyChanged(nameof(RatingButtonText));
             OnPropertyChanged(nameof(FavoriteIconGlyph));
             OnPropertyChanged(nameof(LikeIconGlyph));
             OnPropertyChanged(nameof(IsInteractionEnabled));

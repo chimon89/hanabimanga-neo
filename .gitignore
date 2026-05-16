@@ -368,3 +368,6 @@ appsettings.*.local.json
 
 # Development certificate
 devcert.pfx
+
+# Claude Code local tooling (worktrees, skills, plans)
+.claude/

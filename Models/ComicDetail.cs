@@ -119,6 +119,15 @@ namespace hanabimanga.Models
         public DateTime? LatestChapterUpdatedAt { get; set; }
     }
 
+    internal sealed class RawComicRatingStats
+    {
+        [JsonProperty("rating_average")]
+        public double? RatingAverage { get; set; }
+
+        [JsonProperty("rating_count")]
+        public int? RatingCount { get; set; }
+    }
+
     internal sealed class RawChapterRecord
     {
         [JsonProperty("id")]

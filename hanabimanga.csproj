@@ -26,6 +26,8 @@
   <ItemGroup>
     <Content Include="Assets\*.png" />
     <Content Include="Assets\avatar\*.webp" />
+    <Content Include="Assets\badge\*.png" />
+    <Content Include="Assets\badge\*.webp" />
   </ItemGroup>
 
   <ItemGroup>

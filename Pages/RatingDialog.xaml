@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="hanabimanga.Pages.RatingDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="给这部漫画评分"
+    PrimaryButtonText="提交"
+    CloseButtonText="取消"
+    DefaultButton="Primary"
+    IsPrimaryButtonEnabled="False">
+
+    <StackPanel MinWidth="300" Spacing="14">
+        <StackPanel
+            x:Name="StarsPanel"
+            Orientation="Horizontal"
+            HorizontalAlignment="Center"
+            Spacing="2" />
+        <TextBlock
+            x:Name="ScoreTextBlock"
+            Text="点击星星选择评分（1-10 分）"
+            HorizontalAlignment="Center"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+    </StackPanel>
+</ContentDialog>
