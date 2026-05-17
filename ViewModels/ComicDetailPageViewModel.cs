@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -24,6 +25,7 @@ namespace hanabimanga.ViewModels
         private bool _isFavorite;
         private bool _isLiked;
         private int? _userRating;
+        private ComicComment? _randomCommentPreview;
         private string? _errorMessage;
         private string _errorTitle = "加载失败";
 
@@ -143,6 +145,16 @@ namespace hanabimanga.ViewModels
         public string RatingButtonText => _userRating is { } r ? $"已评 {r} 分" : "评分";
         public string FavoriteIconGlyph => IsFavorite ? "\uE735" : "\uE734";
         public string LikeIconGlyph => IsLiked ? "\uE8E1" : "\uE8E3";
+        public bool HasCommentPreview => _randomCommentPreview != null;
+        public bool HasNoCommentPreview => _detail != null && _randomCommentPreview == null;
+        public string CommentEntryTitle => "评论";
+        public string CommentEntryActionText => HasCommentPreview ? "查看全部" : "留下评论";
+        public string CommentPreviewContent => _randomCommentPreview?.Content ?? "还没有评论，来留下第一条。";
+        public string CommentPreviewAuthorText => _randomCommentPreview is { } comment
+            ? $"{comment.DisplayName} · {comment.CreatedAtText}"
+            : "在这里留下你对这部漫画的想法";
+        public string CommentPreviewMetaText => _randomCommentPreview?.IsSpoiler == true ? "含剧透" : "";
+        public bool HasCommentPreviewMeta => !string.IsNullOrWhiteSpace(CommentPreviewMetaText);
 
         public async Task LoadAsync(string? comicDocumentId)
         {
@@ -179,6 +191,7 @@ namespace hanabimanga.ViewModels
                 BuildTagChips();
                 BuildChapterCategories();
                 await RefreshInteractionStateAsync();
+                await RefreshRandomCommentPreviewAsync();
                 RefreshDetailProperties();
             }
             catch (Exception ex)
@@ -261,6 +274,17 @@ namespace hanabimanga.ViewModels
             }
         }
 
+        public ComicCommentNavigationParameter? CreateCommentsNavigationParameter()
+        {
+            return _detail == null
+                ? null
+                : new ComicCommentNavigationParameter
+                {
+                    ComicId = _detail.Id,
+                    ComicTitle = _detail.Title,
+                };
+        }
+
         private async Task RefreshInteractionStateAsync()
         {
             if (_detail == null)
@@ -275,6 +299,28 @@ namespace hanabimanga.ViewModels
             IsFavorite = state.IsFavorite;
             IsLiked = state.IsLiked;
             UserRating = state.UserRating;
+        }
+
+        private async Task RefreshRandomCommentPreviewAsync()
+        {
+            if (_detail == null)
+            {
+                _randomCommentPreview = null;
+                RefreshCommentPreviewProperties();
+                return;
+            }
+
+            try
+            {
+                _randomCommentPreview = await SupabaseService.Instance.GetRandomComicCommentAsync(_detail.Id);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[comments] random preview failed: {ex.Message}");
+                _randomCommentPreview = null;
+            }
+
+            RefreshCommentPreviewProperties();
         }
 
         public void SelectCategory(string category)
@@ -557,6 +603,19 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(HasSummary));
             OnPropertyChanged(nameof(HasTags));
             OnPropertyChanged(nameof(HasChapters));
+            RefreshCommentPreviewProperties();
+        }
+
+        private void RefreshCommentPreviewProperties()
+        {
+            OnPropertyChanged(nameof(HasCommentPreview));
+            OnPropertyChanged(nameof(HasNoCommentPreview));
+            OnPropertyChanged(nameof(CommentEntryTitle));
+            OnPropertyChanged(nameof(CommentEntryActionText));
+            OnPropertyChanged(nameof(CommentPreviewContent));
+            OnPropertyChanged(nameof(CommentPreviewAuthorText));
+            OnPropertyChanged(nameof(CommentPreviewMetaText));
+            OnPropertyChanged(nameof(HasCommentPreviewMeta));
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

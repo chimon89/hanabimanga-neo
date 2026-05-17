@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using hanabimanga.Controls;
 using hanabimanga.Models;
 using hanabimanga.Services;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using Windows.System;
@@ -24,8 +26,8 @@ namespace hanabimanga.Pages
     /// </summary>
     public sealed partial class AnnouncementWindow : Window
     {
-        private const int DefaultWidth = 900;
-        private const int DefaultHeight = 720;
+        // 9:16 竖向窗口,高度上限(物理像素);实际高度还会按显示器工作区收窄
+        private const int MaxWindowHeight = 1160;
 
         // 防止窗口被 GC 回收而提前关闭
         private static readonly List<AnnouncementWindow> _alive = new();
@@ -101,8 +103,8 @@ namespace hanabimanga.Pages
 
             if (!string.IsNullOrWhiteSpace(announcement.DetailContent))
             {
-                DetailText.Text = announcement.DetailContent;
-                DetailText.Visibility = Visibility.Visible;
+                MarkdownRenderer.Render(DetailPanel, announcement.DetailContent);
+                DetailPanel.Visibility = Visibility.Visible;
                 DetailDivider.Visibility = Visibility.Visible;
             }
 
@@ -149,8 +151,14 @@ namespace hanabimanga.Pages
             }
         }
 
-        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        private void BackButton_Click(object sender, RoutedEventArgs e)
         {
+            Close();
+        }
+
+        private void CloseAccelerator_Invoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+        {
+            args.Handled = true;
             Close();
         }
 
@@ -167,7 +175,12 @@ namespace hanabimanga.Pages
                     presenter.IsMaximizable = false;
                     presenter.IsMinimizable = false;
                 }
-                appWindow.Resize(new SizeInt32(DefaultWidth, DefaultHeight));
+
+                // 9:16 竖向比例;高度不超过显示器工作区的 92%,避免超出屏幕
+                var workArea = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
+                var height = Math.Min(MaxWindowHeight, (int)(workArea.Height * 0.92));
+                var width = height * 9 / 16;
+                appWindow.Resize(new SizeInt32(width, height));
             }
             catch (Exception ex)
             {

@@ -22,6 +22,55 @@ namespace hanabimanga.Pages
         {
             base.OnNavigatedTo(e);
             await ViewModel.LoadAsync();
+            ShowSettingsList();
+        }
+
+        private void ProfileSectionButton_Click(object sender, RoutedEventArgs e)
+            => ShowSettingsDetail("个人资料", ProfileDetailPanel);
+
+        private void AvatarSectionButton_Click(object sender, RoutedEventArgs e)
+            => ShowSettingsDetail("头像", AvatarDetailPanel);
+
+        private void BannerSectionButton_Click(object sender, RoutedEventArgs e)
+            => ShowSettingsDetail("个人页横幅", BannerDetailPanel);
+
+        private void BadgesSectionButton_Click(object sender, RoutedEventArgs e)
+            => ShowSettingsDetail("个人徽章", BadgesDetailPanel);
+
+        private void EmailSectionButton_Click(object sender, RoutedEventArgs e)
+            => ShowSettingsDetail("邮箱", EmailDetailPanel);
+
+        private void PasswordSectionButton_Click(object sender, RoutedEventArgs e)
+            => ShowSettingsDetail("密码", PasswordDetailPanel);
+
+        private void BackSettingsListButton_Click(object sender, RoutedEventArgs e)
+            => ShowSettingsList();
+
+        private void ShowSettingsList()
+        {
+            SettingsListPanel.Visibility = Visibility.Visible;
+            DetailHost.Visibility = Visibility.Collapsed;
+            HideAllDetailPanels();
+        }
+
+        private void ShowSettingsDetail(string title, FrameworkElement panel)
+        {
+            SettingsDetailTitleTextBlock.Text = title;
+            SettingsListPanel.Visibility = Visibility.Collapsed;
+            DetailHost.Visibility = Visibility.Visible;
+            HideAllDetailPanels();
+            panel.Visibility = Visibility.Visible;
+            SettingsScrollViewer.ChangeView(null, 0, null, true);
+        }
+
+        private void HideAllDetailPanels()
+        {
+            ProfileDetailPanel.Visibility = Visibility.Collapsed;
+            AvatarDetailPanel.Visibility = Visibility.Collapsed;
+            BannerDetailPanel.Visibility = Visibility.Collapsed;
+            BadgesDetailPanel.Visibility = Visibility.Collapsed;
+            EmailDetailPanel.Visibility = Visibility.Collapsed;
+            PasswordDetailPanel.Visibility = Visibility.Collapsed;
         }
 
         private async void SaveProfileButton_Click(object sender, RoutedEventArgs e)
@@ -35,6 +84,12 @@ namespace hanabimanga.Pages
             if ((sender as FrameworkElement)?.Tag is not string fileName) return;
             await ViewModel.SelectPresetAvatarAsync(fileName);
             RefreshAccountDisplay();
+        }
+
+        private async void BannerPresetButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is not string fileName) return;
+            await ViewModel.SelectPresetBannerAsync(fileName);
         }
 
         private async void ChooseCustomAvatarButton_Click(object sender, RoutedEventArgs e)
@@ -77,9 +132,10 @@ namespace hanabimanga.Pages
 
         private async void SavePasswordButton_Click(object sender, RoutedEventArgs e)
         {
-            await ViewModel.UpdatePasswordAsync(PasswordBox.Password, PasswordConfirmBox.Password);
+            await ViewModel.UpdatePasswordAsync(CurrentPasswordBox.Password, PasswordBox.Password, PasswordConfirmBox.Password);
             if (!ViewModel.HasError)
             {
+                CurrentPasswordBox.Password = "";
                 PasswordBox.Password = "";
                 PasswordConfirmBox.Password = "";
             }

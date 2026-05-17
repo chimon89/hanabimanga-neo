@@ -23,9 +23,12 @@ namespace hanabimanga.ViewModels
         private bool _isLoading;
         private bool _hasRenderedFirstImage;
         private string? _errorMessage;
+        private string? _downloadFeedbackMessage;
+        private string? _downloadErrorMessage;
         private int _currentPage = 1;
         private ReaderViewMode _viewMode = ReaderViewMode.Page;
         private bool _useUpscaled;
+        private bool _isDownloading;
 
         public ObservableCollection<ReaderPageImage> Pages { get; } = new();
 
@@ -71,7 +74,11 @@ namespace hanabimanga.ViewModels
         public bool ShowWaterfallContent => HasReader && IsWaterfallMode;
         public string ViewModeLabel => IsWaterfallMode ? "瀑布流模式" : "翻页模式";
 
-        public void SetViewMode(ReaderViewMode mode) => ViewMode = mode;
+        public void SetViewMode(ReaderViewMode mode)
+        {
+            ApplyViewMode(mode);
+            _ = SaveViewModePreferenceAsync(mode);
+        }
 
         public string? ErrorMessage
         {
@@ -115,6 +122,50 @@ namespace hanabimanga.ViewModels
         public string CurrentPageUrl => CurrentPageImage?.Url ?? "";
         public ComicReaderDocument? CurrentDocument => _document;
 
+        public bool IsDownloading
+        {
+            get => _isDownloading;
+            private set
+            {
+                if (_isDownloading == value) return;
+                _isDownloading = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CanDownloadCurrentChapter));
+                OnPropertyChanged(nameof(DownloadButtonText));
+            }
+        }
+
+        public bool CanDownloadCurrentChapter => HasReader && !IsLoading && !IsDownloading;
+        public string DownloadButtonText => IsDownloading ? "下载中" : "下载";
+
+        public string? DownloadFeedbackMessage
+        {
+            get => _downloadFeedbackMessage;
+            private set
+            {
+                if (_downloadFeedbackMessage == value) return;
+                _downloadFeedbackMessage = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasDownloadFeedback));
+            }
+        }
+
+        public bool HasDownloadFeedback => !string.IsNullOrWhiteSpace(DownloadFeedbackMessage);
+
+        public string? DownloadErrorMessage
+        {
+            get => _downloadErrorMessage;
+            private set
+            {
+                if (_downloadErrorMessage == value) return;
+                _downloadErrorMessage = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasDownloadError));
+            }
+        }
+
+        public bool HasDownloadError => !string.IsNullOrWhiteSpace(DownloadErrorMessage);
+
         // AI 超分(高清)相关
         public bool UseUpscaled
         {
@@ -138,6 +189,7 @@ namespace hanabimanga.ViewModels
         public async Task LoadAsync(ComicReaderNavigationParameter? parameter)
         {
             _lastParameter = parameter;
+            await ApplyPreferredViewModeAsync();
             var useUpscaled = _useUpscaled || await ShouldUseUpscaledByDefaultAsync(parameter);
             UseUpscaled = useUpscaled;
             await LoadCoreAsync(parameter, useUpscaled);
@@ -188,6 +240,8 @@ namespace hanabimanga.ViewModels
             IsLoading = true;
             _hasRenderedFirstImage = false;
             ErrorMessage = null;
+            DownloadFeedbackMessage = null;
+            DownloadErrorMessage = null;
             _document = null;
             Pages.Clear();
             CurrentPage = 1;
@@ -200,6 +254,8 @@ namespace hanabimanga.ViewModels
                     parameter.ChapterId,
                     useUpscaled);
 
+                await ReaderStorageService.Instance.ApplyCachedPagesAsync(_document);
+
                 foreach (var page in _document.Pages)
                 {
                     Pages.Add(page);
@@ -209,6 +265,7 @@ namespace hanabimanga.ViewModels
                     : 0;
 
                 RefreshAll();
+                StartPreloadAroundCurrentPage();
             }
             catch (Exception ex)
             {
@@ -236,6 +293,46 @@ namespace hanabimanga.ViewModels
             }
         }
 
+        private async Task ApplyPreferredViewModeAsync()
+        {
+            try
+            {
+                var settings = await ReaderStorageService.Instance.LoadSettingsAsync();
+                ApplyViewMode(ParseViewMode(settings.ReaderViewMode));
+            }
+            catch
+            {
+                ApplyViewMode(ReaderViewMode.Page);
+            }
+        }
+
+        private void ApplyViewMode(ReaderViewMode mode)
+        {
+            ViewMode = mode;
+        }
+
+        private async Task SaveViewModePreferenceAsync(ReaderViewMode mode)
+        {
+            try
+            {
+                var settings = await ReaderStorageService.Instance.LoadSettingsAsync();
+                settings.ReaderViewMode = ToStorageViewMode(mode);
+                await ReaderStorageService.Instance.SaveSettingsAsync(settings);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[reader-settings] save view mode failed: {ex.Message}");
+            }
+        }
+
+        private static ReaderViewMode ParseViewMode(string? mode)
+            => string.Equals(mode, "waterfall", StringComparison.OrdinalIgnoreCase)
+                ? ReaderViewMode.Waterfall
+                : ReaderViewMode.Page;
+
+        private static string ToStorageViewMode(ReaderViewMode mode)
+            => mode == ReaderViewMode.Waterfall ? "waterfall" : "page";
+
         public void OnFirstImageRendered()
         {
             if (_hasRenderedFirstImage) return;
@@ -248,6 +345,7 @@ namespace hanabimanga.ViewModels
             if (!CanGoPreviousPage) return false;
 
             CurrentPage--;
+            StartPreloadAroundCurrentPage();
             return true;
         }
 
@@ -256,13 +354,64 @@ namespace hanabimanga.ViewModels
             if (!CanGoNextPage) return false;
 
             CurrentPage++;
+            StartPreloadAroundCurrentPage();
             return true;
+        }
+
+        public async Task DownloadCurrentChapterAsync()
+        {
+            if (_document == null || IsDownloading) return;
+
+            IsDownloading = true;
+            DownloadFeedbackMessage = "正在准备下载本话...";
+            DownloadErrorMessage = null;
+
+            try
+            {
+                var result = await ReaderStorageService.Instance.DownloadChapterAsync(
+                    _document,
+                    item => DownloadFeedbackMessage = $"{item.Title} · {item.ProgressText}");
+
+                DownloadFeedbackMessage = $"{result.ChapterTitle} 已下载到本地";
+                OnPropertyChanged(nameof(CurrentPageUrl));
+                OnPropertyChanged(nameof(CurrentPageImage));
+            }
+            catch (Exception ex)
+            {
+                DownloadFeedbackMessage = null;
+                DownloadErrorMessage = $"下载失败: {ex.Message}";
+            }
+            finally
+            {
+                IsDownloading = false;
+            }
         }
 
         public async Task SaveCurrentProgressAsync()
         {
             if (_document == null || CurrentPage <= 0) return;
             await SupabaseService.Instance.SaveReadingProgressAsync(_document, CurrentPage);
+        }
+
+        private void StartPreloadAroundCurrentPage()
+        {
+            if (_document == null || CurrentPage <= 0) return;
+
+            _ = PreloadAroundCurrentPageAsync(_document, CurrentPage);
+        }
+
+        private static async Task PreloadAroundCurrentPageAsync(
+            ComicReaderDocument document,
+            int currentPage)
+        {
+            try
+            {
+                await ReaderStorageService.Instance.PreloadAsync(document, currentPage);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[reader-cache] preload failed: {ex.Message}");
+            }
         }
 
         private void RefreshAll()
@@ -288,6 +437,10 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(IsUpscaledLoaded));
             OnPropertyChanged(nameof(ShowUpscaledQuota));
             OnPropertyChanged(nameof(UpscaledQuotaText));
+            OnPropertyChanged(nameof(CanDownloadCurrentChapter));
+            OnPropertyChanged(nameof(DownloadButtonText));
+            OnPropertyChanged(nameof(HasDownloadFeedback));
+            OnPropertyChanged(nameof(HasDownloadError));
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

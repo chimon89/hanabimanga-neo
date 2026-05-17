@@ -16,44 +16,47 @@
 
     <Grid>
         <ScrollViewer
+            x:Name="SettingsScrollViewer"
             HorizontalScrollBarVisibility="Disabled"
             HorizontalScrollMode="Disabled"
             VerticalScrollBarVisibility="Auto">
             <Grid
-                MaxWidth="1120"
-                Padding="32,18,32,32"
+                Width="{Binding ElementName=SettingsScrollViewer, Path=ViewportWidth}"
+                MinHeight="{Binding ElementName=SettingsScrollViewer, Path=ViewportHeight}"
+                MaxWidth="1060"
+                Padding="32,10,32,32"
                 HorizontalAlignment="Center"
-                RowSpacing="18">
+                RowSpacing="12">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Spacing="4">
+                <StackPanel Grid.Row="0" Spacing="2">
                     <TextBlock
                         Text="用户设置"
                         FontSize="28"
                         FontWeight="SemiBold" />
                     <TextBlock
-                        Text="管理个人资料、头像、徽章与账号安全"
+                        Text="管理个人资料和账号"
+                        FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </StackPanel>
 
-                <ProgressRing
-                    Grid.Row="1"
-                    HorizontalAlignment="Left"
-                    IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                <StackPanel Grid.Row="1" Spacing="8">
+                    <ProgressRing
+                        HorizontalAlignment="Left"
+                        IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
 
-                <StackPanel Grid.Row="2" Spacing="8">
                     <InfoBar
                         IsClosable="False"
                         IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
                         Severity="Error"
                         Title="操作失败"
                         Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
+
                     <InfoBar
                         IsClosable="False"
                         IsOpen="{x:Bind ViewModel.HasFeedback, Mode=OneWay}"
@@ -62,21 +65,238 @@
                         Message="{x:Bind ViewModel.FeedbackMessage, Mode=OneWay}" />
                 </StackPanel>
 
-                <Grid
-                    Grid.Row="3"
-                    ColumnSpacing="18">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.2*" />
-                        <ColumnDefinition Width="0.9*" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel
+                    x:Name="SettingsListPanel"
+                    Grid.Row="2"
+                    Spacing="8">
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        CornerRadius="8"
+                        Click="ProfileSectionButton_Click">
+                        <Grid Padding="18,14" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                Glyph="&#xE77B;"
+                                FontSize="22"
+                                VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="个人资料" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="用户名、显示名称"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <FontIcon
+                                Grid.Column="2"
+                                Glyph="&#xE76C;"
+                                FontSize="12"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
 
-                    <StackPanel Spacing="18">
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        CornerRadius="8"
+                        Click="AvatarSectionButton_Click">
+                        <Grid Padding="18,14" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                Glyph="&#xE91F;"
+                                FontSize="22"
+                                VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="头像" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="选择预设头像或上传自定义头像"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <FontIcon
+                                Grid.Column="2"
+                                Glyph="&#xE76C;"
+                                FontSize="12"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        CornerRadius="8"
+                        Click="BannerSectionButton_Click">
+                        <Grid Padding="18,14" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                Glyph="&#xE7F4;"
+                                FontSize="22"
+                                VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="个人页横幅" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="更换主页 Banner"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <FontIcon
+                                Grid.Column="2"
+                                Glyph="&#xE76C;"
+                                FontSize="12"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        CornerRadius="8"
+                        Click="BadgesSectionButton_Click">
+                        <Grid Padding="18,14" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                Glyph="&#xEA86;"
+                                FontSize="22"
+                                VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="个人徽章" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="选择哪些徽章展示在主页"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <FontIcon
+                                Grid.Column="2"
+                                Glyph="&#xE76C;"
+                                FontSize="12"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        CornerRadius="8"
+                        Click="EmailSectionButton_Click">
+                        <Grid Padding="18,14" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                Glyph="&#xE715;"
+                                FontSize="22"
+                                VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="邮箱" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="变更登录邮箱"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <FontIcon
+                                Grid.Column="2"
+                                Glyph="&#xE76C;"
+                                FontSize="12"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        CornerRadius="8"
+                        Click="PasswordSectionButton_Click">
+                        <Grid Padding="18,14" ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                Glyph="&#xE72E;"
+                                FontSize="22"
+                                VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock Text="密码" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="修改登录密码"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <FontIcon
+                                Grid.Column="2"
+                                Glyph="&#xE76C;"
+                                FontSize="12"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                    </Button>
+                </StackPanel>
+
+                <Grid
+                    x:Name="DetailHost"
+                    Grid.Row="2"
+                    RowSpacing="12"
+                    Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button
+                            Width="36"
+                            Height="36"
+                            Padding="0"
+                            Click="BackSettingsListButton_Click"
+                            ToolTipService.ToolTip="返回">
+                            <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                        </Button>
+                        <TextBlock
+                            x:Name="SettingsDetailTitleTextBlock"
+                            Grid.Column="1"
+                            Text="设置"
+                            FontSize="22"
+                            FontWeight="SemiBold"
+                            VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Grid Grid.Row="1">
                         <Border
+                            x:Name="ProfileDetailPanel"
                             Padding="18"
                             CornerRadius="8"
                             BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            Visibility="Collapsed">
                             <Grid ColumnSpacing="18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="112" />
@@ -96,10 +316,6 @@
                                 </Border>
 
                                 <StackPanel Grid.Column="1" Spacing="12">
-                                    <TextBlock
-                                        Text="个人资料"
-                                        FontSize="18"
-                                        FontWeight="SemiBold" />
                                     <TextBox
                                         x:Name="UsernameBox"
                                         Header="用户名"
@@ -127,29 +343,41 @@
                         </Border>
 
                         <Border
+                            x:Name="AvatarDetailPanel"
                             Padding="18"
                             CornerRadius="8"
                             BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            Visibility="Collapsed">
                             <StackPanel Spacing="14">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Spacing="2">
-                                        <TextBlock
-                                            Text="头像"
-                                            FontSize="18"
-                                            FontWeight="SemiBold" />
+                                    <Border
+                                        Width="72"
+                                        Height="72"
+                                        CornerRadius="36"
+                                        Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                        <Image
+                                            Source="{x:Bind ViewModel.CurrentAvatarPreviewUrl, Mode=OneWay, Converter={StaticResource StringToImageSource}}"
+                                            Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Spacing="2">
+                                        <TextBlock Text="当前头像" FontWeight="SemiBold" />
                                         <TextBlock
                                             Text="{x:Bind ViewModel.CustomAvatarHint, Mode=OneWay}"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            FontSize="12" />
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </StackPanel>
                                     <Button
-                                        Grid.Column="1"
+                                        Grid.Column="2"
                                         VerticalAlignment="Center"
                                         IsEnabled="{x:Bind ViewModel.CanUploadCustomAvatar, Mode=OneWay}"
                                         Click="ChooseCustomAvatarButton_Click">
@@ -191,17 +419,62 @@
                         </Border>
 
                         <Border
+                            x:Name="BannerDetailPanel"
                             Padding="18"
                             CornerRadius="8"
                             BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            Visibility="Collapsed">
                             <StackPanel Spacing="14">
-                                <TextBlock
-                                    Text="个人徽章"
-                                    FontSize="18"
-                                    FontWeight="SemiBold" />
+                                <Border
+                                    Height="168"
+                                    CornerRadius="8"
+                                    Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                    <Image
+                                        Source="{x:Bind ViewModel.CurrentBannerPreviewUrl, Mode=OneWay, Converter={StaticResource StringToImageSource}}"
+                                        Stretch="UniformToFill" />
+                                </Border>
 
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.BannerPresets, Mode=OneWay}">
+                                    <ItemsRepeater.Layout>
+                                        <UniformGridLayout
+                                            ItemsJustification="Start"
+                                            ItemsStretch="None"
+                                            MinColumnSpacing="10"
+                                            MinRowSpacing="10"
+                                            MinItemWidth="150"
+                                            MinItemHeight="70" />
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate x:DataType="models:BannerPresetOption">
+                                            <Button
+                                                Width="146"
+                                                Height="66"
+                                                Padding="0"
+                                                CornerRadius="8"
+                                                Tag="{x:Bind FileName}"
+                                                Click="BannerPresetButton_Click"
+                                                ToolTipService.ToolTip="{x:Bind Label}">
+                                                <Image
+                                                    Source="{x:Bind PreviewUrl, Converter={StaticResource StringToImageSource}}"
+                                                    Stretch="UniformToFill" />
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            x:Name="BadgesDetailPanel"
+                            Padding="18"
+                            CornerRadius="8"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            Visibility="Collapsed">
+                            <StackPanel Spacing="14">
                                 <ItemsRepeater
                                     ItemsSource="{x:Bind ViewModel.Badges, Mode=OneWay}"
                                     Visibility="{x:Bind ViewModel.HasBadges, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
@@ -263,20 +536,16 @@
                                     Visibility="{x:Bind ViewModel.HasNoBadges, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
                             </StackPanel>
                         </Border>
-                    </StackPanel>
 
-                    <StackPanel Grid.Column="1" Spacing="18">
                         <Border
+                            x:Name="EmailDetailPanel"
                             Padding="18"
                             CornerRadius="8"
                             BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                            <StackPanel Spacing="12">
-                                <TextBlock
-                                    Text="邮箱"
-                                    FontSize="18"
-                                    FontWeight="SemiBold" />
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            Visibility="Collapsed">
+                            <StackPanel Spacing="12" MaxWidth="520" HorizontalAlignment="Left">
                                 <TextBox
                                     x:Name="EmailBox"
                                     Header="新邮箱"
@@ -300,22 +569,27 @@
                         </Border>
 
                         <Border
+                            x:Name="PasswordDetailPanel"
                             Padding="18"
                             CornerRadius="8"
                             BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                            <StackPanel Spacing="12">
-                                <TextBlock
-                                    Text="密码"
-                                    FontSize="18"
-                                    FontWeight="SemiBold" />
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            Visibility="Collapsed">
+                            <StackPanel Spacing="12" MaxWidth="720" HorizontalAlignment="Stretch">
+                                <PasswordBox
+                                    x:Name="CurrentPasswordBox"
+                                    Width="640"
+                                    Header="当前密码"
+                                    PlaceholderText="输入当前密码以验证身份" />
                                 <PasswordBox
                                     x:Name="PasswordBox"
+                                    Width="640"
                                     Header="新密码"
                                     PlaceholderText="至少 6 位字符" />
                                 <PasswordBox
                                     x:Name="PasswordConfirmBox"
+                                    Width="640"
                                     Header="确认新密码"
                                     PlaceholderText="再次输入新密码" />
                                 <Button
@@ -330,7 +604,7 @@
                                 </Button>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    </Grid>
                 </Grid>
             </Grid>
         </ScrollViewer>

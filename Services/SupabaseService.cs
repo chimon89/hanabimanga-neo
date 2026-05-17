@@ -12,10 +12,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using hanabimanga.Models;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Supabase;
 using Supabase.Functions;
 using Supabase.Gotrue;
+using Supabase.Realtime.PostgresChanges;
 using Client = Supabase.Client;
+using static Supabase.Postgrest.Constants;
 
 namespace hanabimanga.Services
 {
@@ -33,6 +36,9 @@ namespace hanabimanga.Services
         private string? _readerClientFingerprint;
         private readonly HttpClient _httpClient = new();
         private readonly SemaphoreSlim _initLock = new(1, 1);
+        private Supabase.Realtime.RealtimeChannel? _notificationChannel;
+        private string? _notificationSubscriptionUserId;
+        private string? _notificationSubscriptionAccessToken;
 
         public Client Client =>
             _client ?? throw new InvalidOperationException(
@@ -245,6 +251,7 @@ namespace hanabimanga.Services
                 {
                     PageNumber = TryParsePageNumber(item.Page),
                     Url = item.Url!,
+                    OriginalUrl = item.Url!,
                 })
                 .Where(item => item.PageNumber > 0)
                 .OrderBy(item => item.PageNumber)
@@ -351,6 +358,7 @@ namespace hanabimanga.Services
                 $"username={profile?.Username ?? "(null)"}, " +
                 $"display_name={profile?.DisplayName ?? "(null)"}, " +
                 $"avatar_url={profile?.AvatarUrl ?? "(null)"}, " +
+                $"banner_url={profile?.BannerUrl ?? "(null)"}, " +
                 $"vip_expiration_date={profile?.VipExpirationDate?.ToString("O") ?? "(null)"}");
 
             return profile;
@@ -370,7 +378,76 @@ namespace hanabimanga.Services
                 Profile = profileTask.Result ?? new UserProfile { Id = userId },
                 Badges = badgesTask.Result,
                 AvatarPresets = BuildAvatarPresetOptions(),
+                BannerPresets = BuildBannerPresetOptions(),
             };
+        }
+
+        public async Task<TaskCenterDocument?> GetCurrentUserTaskCenterAsync()
+        {
+            var token = CurrentSession?.AccessToken;
+            var userId = CurrentUser?.Id;
+            var isSignedIn = !string.IsNullOrWhiteSpace(token) &&
+                !string.IsNullOrWhiteSpace(userId);
+
+            var taskDefinitions = await TryGetTaskCenterRecordsAsync(
+                () => GetRestRecordsWithOptionalAuthAsync<RawTaskDefinitionRecord>(
+                    "task_definitions?select=id,title,description,category,task_type,is_active,sort_order,created_at,updated_at" +
+                    "&is_active=eq.true&order=sort_order.asc,created_at.asc&limit=100"));
+            var products = await TryGetTaskCenterRecordsAsync(
+                () => GetRestRecordsAsync<RawPointProductRecord>(
+                    "products?select=id,name,description,price,image_url,duration_days,is_active,sort_order,stock_limit,sales_count,type" +
+                    "&is_active=eq.true&order=sort_order.asc&limit=20"));
+
+            if (!isSignedIn)
+            {
+                return BuildTaskCenterDocument(
+                    userId: "",
+                    ledgerRows: new List<RawPointLedgerRecord>(),
+                    taskDefinitions,
+                    progressRows: new List<RawUserTaskProgressRecord>(),
+                    products,
+                    todayCommentCount: 0,
+                    todayReadProgress: 0);
+            }
+
+            var escapedUserId = Uri.EscapeDataString(userId!);
+            var todayStartUtc = DateTime.Now.Date.ToUniversalTime()
+                .ToString("O", CultureInfo.InvariantCulture);
+            var escapedTodayStart = Uri.EscapeDataString(todayStartUtc);
+
+            var ledgerRows = await TryGetTaskCenterRecordsAsync(
+                () => GetAuthenticatedRestRecordsAsync<RawPointLedgerRecord>(
+                    "points_ledger?select=id,user_id,amount,reason,created_at" +
+                    $"&user_id=eq.{escapedUserId}&order=created_at.desc&limit=200"));
+            var progressRows = await TryGetTaskCenterRecordsAsync(
+                () => GetAuthenticatedRestRecordsAsync<RawUserTaskProgressRecord>(
+                    "user_task_progress?select=user_id,task_id,period_key" +
+                    $"&user_id=eq.{escapedUserId}&limit=500"));
+            var todayComments = await TryGetTaskCenterRecordsAsync(
+                () => GetAuthenticatedRestRecordsAsync<RawCommentRecord>(
+                    "comments?select=id,created_at" +
+                    $"&user_id=eq.{escapedUserId}&created_at=gte.{escapedTodayStart}&limit=100"));
+            var todayReadingRows = await TryGetTaskCenterRecordsAsync(
+                () => GetAuthenticatedRestRecordsAsync<RawReadingHistoryRecord>(
+                    "reading_history?select=user_id,comic_id,page_index,total_pages,last_read_at" +
+                    $"&user_id=eq.{escapedUserId}&last_read_at=gte.{escapedTodayStart}&limit=100"));
+            var todayChapterViews = await TryGetTaskCenterRecordsAsync(
+                () => GetAuthenticatedRestRecordsAsync<RawChapterViewLogRecord>(
+                    "chapter_view_logs?select=user_id,chapter_id,viewed_at" +
+                    $"&user_id=eq.{escapedUserId}&viewed_at=gte.{escapedTodayStart}&limit=100"));
+
+            var todayReadProgress = Math.Max(
+                todayChapterViews.Count,
+                todayReadingRows.Sum(row => Math.Clamp(row.PageIndex ?? 0, 0, 20)));
+
+            return BuildTaskCenterDocument(
+                userId!,
+                ledgerRows,
+                taskDefinitions,
+                progressRows,
+                products,
+                todayComments.Count,
+                Math.Clamp(todayReadProgress, 0, 20));
         }
 
         public async Task<UserProfile> UpdateCurrentUserProfileAsync(string username, string displayName)
@@ -402,6 +479,20 @@ namespace hanabimanga.Services
             await PatchCurrentUserProfileFieldsAsync(userId, new Dictionary<string, object?>
             {
                 ["avatar_url"] = normalizedAvatar,
+            });
+
+            return await GetCurrentUserProfileAsync(userId) ?? new UserProfile { Id = userId };
+        }
+
+        public async Task<UserProfile> SetCurrentUserBannerAsync(string bannerValue)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再修改个人页横幅。");
+            var normalizedBanner = NormalizeOptionalProfileText(bannerValue, 512)
+                ?? "ic_banner_default.webp";
+
+            await PatchCurrentUserProfileFieldsAsync(userId, new Dictionary<string, object?>
+            {
+                ["banner_url"] = normalizedBanner,
             });
 
             return await GetCurrentUserProfileAsync(userId) ?? new UserProfile { Id = userId };
@@ -482,6 +573,43 @@ namespace hanabimanga.Services
             await Client.Auth.Update(new UserAttributes { Password = password });
         }
 
+        public async Task UpdateCurrentUserPasswordAsync(string currentPassword, string newPassword)
+        {
+            if (string.IsNullOrWhiteSpace(currentPassword))
+            {
+                throw new InvalidOperationException("请输入当前密码。");
+            }
+
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+            {
+                throw new InvalidOperationException("新密码至少需要 6 个字符。");
+            }
+
+            var userId = GetRequiredCurrentUserId("请先登录后再修改密码。");
+            var email = CurrentUser?.Email;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                throw new InvalidOperationException("无法读取当前账号邮箱，请重新登录后再修改密码。");
+            }
+
+            try
+            {
+                await Client.Auth.SignInWithPassword(email, currentPassword);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[auth] password recheck failed: {ex.Message}");
+                throw new InvalidOperationException("当前密码验证失败，请检查后重试。");
+            }
+
+            if (CurrentUser?.Id != userId)
+            {
+                throw new InvalidOperationException("当前会话发生变化，请重新登录后再修改密码。");
+            }
+
+            await Client.Auth.Update(new UserAttributes { Password = newPassword });
+        }
+
         public async Task<ComicInteractionState> GetComicInteractionStateAsync(long comicId)
         {
             var userId = GetRequiredCurrentUserId("请先登录后再同步收藏和点赞状态。");
@@ -557,6 +685,422 @@ namespace hanabimanga.Services
             var stats = await GetSingleRestRecordAsync<RawComicRatingStats>(
                 "comics", "rating_average,rating_count", $"id=eq.{comicId}");
             return (stats?.RatingAverage ?? 0, stats?.RatingCount ?? 0);
+        }
+
+        public async Task<List<ComicComment>> GetComicCommentsAsync(
+            long comicId,
+            int limit = 100,
+            bool publicOnly = false)
+        {
+            if (comicId <= 0) return new List<ComicComment>();
+
+            var safeLimit = Math.Clamp(limit, 1, 200);
+            var statusFilter = publicOnly ? "&status=eq.public" : "";
+            var rows = await GetRestRecordsWithOptionalAuthAsync<RawCommentRecord>(
+                "comments?select=id,user_id,comic_id,chapter_id,parent_id,content,status,is_spoiler,like_count,reply_count,created_at,updated_at" +
+                $"&comic_id=eq.{comicId}&parent_id=is.null{statusFilter}&order=created_at.desc&limit={safeLimit}");
+
+            var profiles = await GetProfilesByIdsAsync(rows
+                .Select(row => row.UserId)
+                .Where(userId => !string.IsNullOrWhiteSpace(userId))
+                .Select(userId => userId!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList());
+
+            return rows
+                .Select(row =>
+                {
+                    profiles.TryGetValue(row.UserId ?? "", out var profile);
+                    return MapComment(row, profile);
+                })
+                .Where(comment => !string.IsNullOrWhiteSpace(comment.Content))
+                .ToList();
+        }
+
+        public async Task<ComicComment?> GetRandomComicCommentAsync(long comicId)
+        {
+            var comments = await GetComicCommentsAsync(comicId, limit: 40, publicOnly: true);
+            return comments.Count == 0 ? null : comments[Random.Shared.Next(comments.Count)];
+        }
+
+        public async Task SubmitComicCommentAsync(long comicId, string content, bool isSpoiler)
+        {
+            if (comicId <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(comicId), "漫画编号无效。");
+            }
+
+            var normalized = content.Trim();
+            if (normalized.Length < 2)
+            {
+                throw new InvalidOperationException("评论至少需要 2 个字符。");
+            }
+
+            if (normalized.Length > 1000)
+            {
+                throw new InvalidOperationException("评论不能超过 1000 个字符。");
+            }
+
+            var userId = GetRequiredCurrentUserId("请先登录后再发表评论。");
+            await PostRestRecordAsync("comments", new
+            {
+                user_id = userId,
+                comic_id = comicId,
+                content = normalized,
+                is_spoiler = isSpoiler,
+            });
+        }
+
+        // ===== 工单 / 资源与反馈 =====
+
+        public async Task<List<FeedbackTicket>> GetFeedbackTicketsAsync(
+            string? domain,
+            string? status,
+            string sortKey)
+        {
+            var order = sortKey switch
+            {
+                "updated" => "updated_at.desc.nullslast",
+                "newest" => "created_at.desc",
+                "oldest" => "created_at.asc",
+                _ => "vote_count.desc",
+            };
+
+            var query =
+                "kanban_tickets?select=id,title,description,domain,category,status,priority," +
+                "vote_count,meta_info,admin_response,reporter_id,created_at,updated_at";
+            if (!string.IsNullOrWhiteSpace(domain))
+            {
+                query += $"&domain=eq.{Uri.EscapeDataString(domain)}";
+            }
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query += $"&status=eq.{Uri.EscapeDataString(status)}";
+            }
+            query += $"&order={order}&limit=60";
+
+            var rows = await GetRestRecordsWithOptionalAuthAsync<RawTicketRecord>(query);
+
+            var profiles = await GetProfilesByIdsAsync(rows
+                .Select(row => row.ReporterId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList());
+
+            var currentUserId = CurrentUser?.Id;
+            return rows
+                .Select(row =>
+                {
+                    profiles.TryGetValue(row.ReporterId ?? "", out var profile);
+                    return MapTicket(row, profile, currentUserId);
+                })
+                .Where(ticket => !string.IsNullOrWhiteSpace(ticket.Id))
+                .ToList();
+        }
+
+        public async Task<HashSet<string>> GetMyTicketVoteIdsAsync()
+        {
+            var userId = CurrentUser?.Id;
+            if (string.IsNullOrWhiteSpace(userId) ||
+                string.IsNullOrWhiteSpace(CurrentSession?.AccessToken))
+            {
+                return new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var rows = await GetAuthenticatedRestRecordsAsync<RawTicketVoteRecord>(
+                $"ticket_votes?select=ticket_id&user_id=eq.{Uri.EscapeDataString(userId)}");
+
+            return rows
+                .Where(row => !string.IsNullOrWhiteSpace(row.TicketId))
+                .Select(row => row.TicketId!)
+                .ToHashSet(StringComparer.Ordinal);
+        }
+
+        public async Task AddTicketVoteAsync(string ticketId)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再共鸣。");
+            await PostRestRecordAsync("ticket_votes", new
+            {
+                ticket_id = ticketId,
+                user_id = userId,
+            });
+        }
+
+        public async Task RemoveTicketVoteAsync(string ticketId)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再操作。");
+            await DeleteRestRecordsAsync(
+                $"ticket_votes?ticket_id=eq.{Uri.EscapeDataString(ticketId)}" +
+                $"&user_id=eq.{Uri.EscapeDataString(userId)}");
+        }
+
+        public async Task<string> SubmitTicketAsync(
+            string title,
+            string? description,
+            string domain,
+            string category,
+            object metaInfo)
+        {
+            GetRequiredCurrentUserId("请先登录后再提交反馈。");
+
+            var trimmedTitle = title.Trim();
+            if (trimmedTitle.Length == 0)
+            {
+                throw new InvalidOperationException("工单标题不能为空。");
+            }
+
+            var raw = await PostRpcAsync<JToken>("submit_ticket", new
+            {
+                p_title = trimmedTitle,
+                p_description = string.IsNullOrWhiteSpace(description) ? null : description!.Trim(),
+                p_domain = domain,
+                p_category = category,
+                p_meta_info = metaInfo,
+            }, authenticated: true);
+
+            var result = (raw as JArray)?.FirstOrDefault() as JObject ?? raw as JObject;
+            if (result == null)
+            {
+                throw new InvalidOperationException("提交失败:服务未返回结果。");
+            }
+
+            if (result["success"]?.Value<bool>() == true)
+            {
+                return result["ticket_id"]?.ToString() ?? "";
+            }
+
+            throw new InvalidOperationException(
+                BuildTicketErrorMessage(result["error"]?.ToString(), result));
+        }
+
+        public async Task<TicketQuota?> GetTicketQuotaAsync()
+        {
+            GetRequiredCurrentUserId("请先登录后再查看反馈配额。");
+
+            var raw = await PostRpcAsync<JToken>("get_ticket_quota", new { }, authenticated: true);
+            var obj = (raw as JArray)?.FirstOrDefault() as JObject ?? raw as JObject;
+            if (obj == null) return null;
+
+            return new TicketQuota
+            {
+                IsVip = obj["is_vip"]?.Value<bool>() ?? false,
+                OpenCount = obj["open_count"]?.Value<int>() ?? 0,
+                MaxOpen = obj["max_open"]?.Value<int>() ?? 0,
+                Remaining = obj["remaining"]?.Value<int>() ?? 0,
+                IsBanned = obj["is_banned"]?.Value<bool>() ?? false,
+                IsCoolingDown = obj["is_cooling_down"]?.Value<bool>() ?? false,
+                RetryAfter = ParseTicketDate(obj["retry_after"]),
+                BannedUntil = ParseTicketDate(obj["banned_until"]),
+            };
+        }
+
+        private static DateTime? ParseTicketDate(JToken? token)
+        {
+            if (token == null || token.Type == JTokenType.Null) return null;
+            if (token.Type == JTokenType.Date) return token.Value<DateTime>();
+            return DateTime.TryParse(token.ToString(), out var parsed) ? parsed : null;
+        }
+
+        private static string BuildTicketErrorMessage(string? error, JObject result)
+        {
+            switch (error)
+            {
+                case "AUTH_REQUIRED":
+                    return "请先登录后再提交反馈。";
+                case "BANNED":
+                {
+                    var until = ParseTicketDate(result["banned_until"]);
+                    return until is { } u
+                        ? $"反馈提交权限已被限制,将于 {u.ToLocalTime():yyyy-MM-dd HH:mm} 解除。"
+                        : "反馈提交权限已被限制。";
+                }
+                case "COOLDOWN":
+                {
+                    var retry = ParseTicketDate(result["retry_after"]);
+                    return retry is { } r
+                        ? $"提交过于频繁,请在 {r.ToLocalTime():HH:mm} 后再试。"
+                        : "提交过于频繁,请稍后再试。";
+                }
+                case "QUOTA_EXCEEDED":
+                {
+                    var open = result["open_count"]?.ToString();
+                    var max = result["max_open"]?.ToString();
+                    return string.IsNullOrWhiteSpace(open)
+                        ? "未处理的反馈数量已达上限,请等待受理后再提交。"
+                        : $"已有 {open}/{max} 条未处理反馈,请等待受理后再提交。";
+                }
+                default:
+                    return "提交失败,请稍后再试。";
+            }
+        }
+
+        private static FeedbackTicket MapTicket(
+            RawTicketRecord record,
+            RawProfileSummaryRecord? profile,
+            string? currentUserId)
+        {
+            var meta = record.MetaInfo;
+            var bangumiName = meta?["bangumi_name_cn"]?.ToString();
+            if (string.IsNullOrWhiteSpace(bangumiName))
+            {
+                bangumiName = meta?["bangumi_name"]?.ToString();
+            }
+            var comicTitle = meta?["comic_title"]?.ToString();
+
+            var reporterId = record.ReporterId ?? "";
+            var name = profile?.DisplayName;
+            if (string.IsNullOrWhiteSpace(name)) name = profile?.Username;
+            if (string.IsNullOrWhiteSpace(name)) name = "花火用户";
+
+            return new FeedbackTicket
+            {
+                Id = record.Id ?? "",
+                Title = record.Title ?? "",
+                Description = record.Description,
+                Domain = string.IsNullOrWhiteSpace(record.Domain) ? "OPS" : record.Domain!,
+                Category = string.IsNullOrWhiteSpace(record.Category) ? "其他" : record.Category!,
+                Status = string.IsNullOrWhiteSpace(record.Status) ? "RECORDED" : record.Status!,
+                Priority = record.Priority ?? 0,
+                VoteCount = record.VoteCount ?? 0,
+                AdminResponse = record.AdminResponse,
+                ReporterId = reporterId,
+                CreatedAt = record.CreatedAt,
+                UpdatedAt = record.UpdatedAt,
+                BangumiName = string.IsNullOrWhiteSpace(bangumiName) ? null : bangumiName,
+                ComicTitle = string.IsNullOrWhiteSpace(comicTitle) ? null : comicTitle,
+                ReporterName = name!,
+                ReporterAvatarUrl = profile?.AvatarUrl,
+                IsOwn = !string.IsNullOrWhiteSpace(currentUserId)
+                    && string.Equals(currentUserId, reporterId, StringComparison.Ordinal),
+            };
+        }
+
+        public async Task<UserProfileDocument?> GetUserProfilePageAsync(string userId)
+        {
+            var normalizedUserId = userId.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId)) return null;
+
+            var escapedUserId = Uri.EscapeDataString(normalizedUserId);
+            var profileTask = GetSingleRestRecordAsync<RawUserProfileRecord>(
+                "profiles",
+                "id,username,display_name,avatar_url,banner_url,created_at",
+                $"id=eq.{escapedUserId}");
+            var commentsTask = GetRestRecordsWithOptionalAuthAsync<RawCommentRecord>(
+                "comments?select=id,user_id,comic_id,chapter_id,parent_id,content,status,is_spoiler,like_count,reply_count,created_at,updated_at" +
+                $"&user_id=eq.{escapedUserId}&parent_id=is.null&order=created_at.desc&limit=30");
+            var favoritesTask = GetUserInteractionRecordsAsync("comics_favorites", normalizedUserId, 30);
+            var likesTask = GetUserInteractionRecordsAsync("comic_likes", normalizedUserId, 30);
+            var ratingsTask = GetUserRatingTimelineRecordsAsync(normalizedUserId, 30);
+
+            await Task.WhenAll(profileTask, commentsTask, favoritesTask, likesTask, ratingsTask);
+
+            var profile = profileTask.Result;
+            if (profile?.Id == null) return null;
+
+            var commentRows = commentsTask.Result;
+            var favoriteRows = favoritesTask.Result;
+            var likeRows = likesTask.Result;
+            var ratingRows = ratingsTask.Result;
+
+            var comicIds = commentRows
+                .Select(row => row.ComicId)
+                .Concat(favoriteRows.Select(row => row.ComicId))
+                .Concat(likeRows.Select(row => row.ComicId))
+                .Concat(ratingRows.Select(row => row.ComicId))
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+            var comics = await GetComicRecordsByIdsAsync(comicIds);
+
+            var timeline = new List<UserTimelineItem>();
+            foreach (var comment in commentRows)
+            {
+                if (!comics.TryGetValue(comment.ComicId, out var comic)) continue;
+                timeline.Add(new UserTimelineItem
+                {
+                    Kind = "comment",
+                    IconGlyph = "\uE8F2",
+                    Title = $"评论了《{comic.Title ?? "漫画"}》",
+                    Body = comment.Content,
+                    Meta = comment.Status == "public" ? "评论" : GetCommentStatusLabel(comment.Status),
+                    CreatedAt = comment.CreatedAt,
+                    ComicId = comic.Id,
+                    ComicTitle = comic.Title,
+                    ComicCoverUrl = comic.CoverUrl,
+                });
+            }
+
+            foreach (var favorite in favoriteRows)
+            {
+                if (!comics.TryGetValue(favorite.ComicId, out var comic)) continue;
+                timeline.Add(new UserTimelineItem
+                {
+                    Kind = "favorite",
+                    IconGlyph = "\uE734",
+                    Title = $"收藏了《{comic.Title ?? "漫画"}》",
+                    Meta = "收藏",
+                    CreatedAt = favorite.CreatedAt,
+                    ComicId = comic.Id,
+                    ComicTitle = comic.Title,
+                    ComicCoverUrl = comic.CoverUrl,
+                });
+            }
+
+            foreach (var like in likeRows)
+            {
+                if (!comics.TryGetValue(like.ComicId, out var comic)) continue;
+                timeline.Add(new UserTimelineItem
+                {
+                    Kind = "like",
+                    IconGlyph = "\uE8E1",
+                    Title = $"点赞了《{comic.Title ?? "漫画"}》",
+                    Meta = "点赞",
+                    CreatedAt = like.CreatedAt,
+                    ComicId = comic.Id,
+                    ComicTitle = comic.Title,
+                    ComicCoverUrl = comic.CoverUrl,
+                });
+            }
+
+            foreach (var rating in ratingRows)
+            {
+                if (!comics.TryGetValue(rating.ComicId, out var comic)) continue;
+                timeline.Add(new UserTimelineItem
+                {
+                    Kind = "rating",
+                    IconGlyph = "\uE735",
+                    Title = $"给《{comic.Title ?? "漫画"}》打了 {rating.Score} 分",
+                    Meta = "评分",
+                    CreatedAt = rating.UpdatedAt ?? rating.CreatedAt,
+                    ComicId = comic.Id,
+                    ComicTitle = comic.Title,
+                    ComicCoverUrl = comic.CoverUrl,
+                });
+            }
+
+            return new UserProfileDocument
+            {
+                Profile = new UserProfileHeader
+                {
+                    UserId = profile.Id,
+                    Username = profile.Username,
+                    DisplayName = string.IsNullOrWhiteSpace(profile.DisplayName)
+                        ? profile.Username ?? "花火用户"
+                        : profile.DisplayName!,
+                    AvatarUrl = profile.AvatarUrl,
+                    BannerUrl = profile.BannerUrl,
+                    CreatedAt = profile.CreatedAt,
+                    IsSelf = string.Equals(CurrentUser?.Id, profile.Id, StringComparison.Ordinal),
+                    CommentCount = commentRows.Count,
+                    FavoriteCount = favoriteRows.Count,
+                    LikeCount = likeRows.Count,
+                },
+                Timeline = timeline
+                    .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
+                    .Take(80)
+                    .ToList(),
+            };
         }
 
         private async Task<int?> GetUserComicRatingAsync(string userId, long comicId)
@@ -644,6 +1188,25 @@ namespace hanabimanga.Services
                 {
                     FileName = $"ic_avatar_{i:00}.webp",
                     Label = $"预设头像 {i:00}",
+                });
+            }
+
+            return items;
+        }
+
+        private static List<BannerPresetOption> BuildBannerPresetOptions()
+        {
+            var items = new List<BannerPresetOption>
+            {
+                new() { FileName = "ic_banner_default.webp", Label = "默认横幅" },
+            };
+
+            for (var i = 1; i <= 15; i++)
+            {
+                items.Add(new BannerPresetOption
+                {
+                    FileName = $"ic_banner_{i:00}.webp",
+                    Label = $"预设横幅 {i:00}",
                 });
             }
 
@@ -756,6 +1319,186 @@ namespace hanabimanga.Services
             }
             return items;
         }
+
+        public async Task<List<CategoryOption>> GetCategoriesAsync()
+        {
+            var records = await GetRestRecordsAsync<RawCategoryOption>(
+                "categories?select=id,name&order=id");
+
+            var options = new List<CategoryOption>
+            {
+                new CategoryOption { Id = null, Name = "全部" },
+            };
+            foreach (var record in records)
+            {
+                if (string.IsNullOrWhiteSpace(record.Name)) continue;
+                options.Add(new CategoryOption { Id = record.Id, Name = record.Name });
+            }
+            return options;
+        }
+
+        public async Task<List<ComicListItem>> GetComicsByFilterAsync(
+            long? categoryId,
+            string? regionFilter,
+            bool? isFinished,
+            string orderColumn,
+            int offset,
+            int limit)
+        {
+            const string select = "id,title,cover_url,is_finished,rating_average,rating_count";
+            var safeLimit = Math.Clamp(limit, 1, 100);
+            var safeOffset = Math.Max(offset, 0);
+
+            // slug 非空 = 已正式上架(与排行 / count_comics_by_category 口径一致)
+            // id 作为次级排序键,保证分页结果稳定
+            var path = $"comics?select={select}&slug=not.is.null" +
+                $"&order={orderColumn}.desc.nullslast,id.desc" +
+                $"&offset={safeOffset}&limit={safeLimit}";
+
+            if (categoryId is { } id)
+            {
+                path += $"&category_id=eq.{id}";
+            }
+            if (!string.IsNullOrWhiteSpace(regionFilter))
+            {
+                path += $"&region={regionFilter}";
+            }
+            if (isFinished is { } finished)
+            {
+                path += $"&is_finished=eq.{(finished ? "true" : "false")}";
+            }
+
+            var records = await GetRestRecordsAsync<RawRankingComicRecord>(path);
+            return records.Select(MapFilteredComic).ToList();
+        }
+
+        public async Task<List<NotificationItem>> GetNotificationsAsync(int limit = 30)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再查看通知。");
+            var response = await Client.From<NotificationRecord>()
+                .Filter("user_id", Operator.Equals, userId)
+                .Order("created_at", Ordering.Descending)
+                .Limit(Math.Clamp(limit, 1, 100))
+                .Get();
+
+            return response.Models.Select(MapNotification).ToList();
+        }
+
+        public async Task MarkNotificationReadAsync(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+            GetRequiredCurrentUserId("请先登录后再操作通知。");
+            await Client.From<NotificationRecord>()
+                .Filter("id", Operator.Equals, id)
+                .Set(x => x.IsRead, true)
+                .Update();
+        }
+
+        public async Task MarkAllNotificationsReadAsync()
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再操作通知。");
+            await Client.From<NotificationRecord>()
+                .Filter("user_id", Operator.Equals, userId)
+                .Set(x => x.IsRead, true)
+                .Update();
+        }
+
+        // 订阅 notifications 表的 INSERT;RLS 保证只收到当前用户的行,另在回调内再校验一次 user_id。
+        public async Task SubscribeNotificationsAsync(Action<NotificationItem> onInserted)
+        {
+            var userId = GetRequiredCurrentUserId("请先登录后再订阅通知。");
+            var accessToken = GetRequiredAccessToken();
+
+            if (_notificationChannel is not null &&
+                string.Equals(_notificationSubscriptionUserId, userId, StringComparison.Ordinal) &&
+                string.Equals(_notificationSubscriptionAccessToken, accessToken, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            UnsubscribeNotifications();
+
+            Client.Realtime.SetAuth(accessToken);
+
+            var channel = Client.Realtime.Channel($"notifications-{userId}");
+            channel.Register(new PostgresChangesOptions(
+                "public",
+                "notifications",
+                PostgresChangesOptions.ListenType.Inserts,
+                $"user_id=eq.{Uri.EscapeDataString(userId)}"));
+            channel.AddPostgresChangeHandler(
+                PostgresChangesOptions.ListenType.Inserts,
+                (_, change) =>
+                {
+                    try
+                    {
+                        var record = change.Model<NotificationRecord>();
+                        if (record is not null && record.UserId == userId)
+                        {
+                            onInserted(MapNotification(record));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[notifications] realtime handler failed: {ex.Message}");
+                    }
+                });
+
+            try
+            {
+                await channel.Subscribe();
+                _notificationChannel = channel;
+                _notificationSubscriptionUserId = userId;
+                _notificationSubscriptionAccessToken = accessToken;
+            }
+            catch
+            {
+                try
+                {
+                    channel.Unsubscribe();
+                    Client.Realtime.Remove(channel);
+                }
+                catch
+                {
+                    // best-effort cleanup after a failed subscribe
+                }
+
+                throw;
+            }
+        }
+
+        public void UnsubscribeNotifications()
+        {
+            if (_notificationChannel is null)
+            {
+                _notificationSubscriptionUserId = null;
+                _notificationSubscriptionAccessToken = null;
+                return;
+            }
+
+            try
+            {
+                _notificationChannel.Unsubscribe();
+                _client?.Realtime.Remove(_notificationChannel);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[notifications] unsubscribe failed: {ex.Message}");
+            }
+            _notificationChannel = null;
+            _notificationSubscriptionUserId = null;
+            _notificationSubscriptionAccessToken = null;
+        }
+
+        private static NotificationItem MapNotification(NotificationRecord record) => new()
+        {
+            Id = record.Id,
+            Title = record.Title ?? "",
+            Body = record.Body,
+            Type = record.Type ?? "",
+            IsRead = record.IsRead,
+            CreatedAt = record.CreatedAt,
+        };
 
         public async Task<RecentReadingProgress?> GetRecentReadingProgressAsync()
         {
@@ -946,6 +1689,25 @@ namespace hanabimanga.Services
                 $"{tableName}?select=comic_id,created_at&user_id=eq.{Uri.EscapeDataString(userId)}&order=created_at.desc&limit=200");
         }
 
+        private Task<List<RawComicInteractionRecord>> GetUserInteractionRecordsAsync(
+            string tableName,
+            string userId,
+            int limit)
+        {
+            var safeLimit = Math.Clamp(limit, 1, 100);
+            return GetRestRecordsAsync<RawComicInteractionRecord>(
+                $"{tableName}?select=comic_id,created_at&user_id=eq.{Uri.EscapeDataString(userId)}&order=created_at.desc&limit={safeLimit}");
+        }
+
+        private Task<List<RawUserRatingTimelineRecord>> GetUserRatingTimelineRecordsAsync(
+            string userId,
+            int limit)
+        {
+            var safeLimit = Math.Clamp(limit, 1, 100);
+            return GetRestRecordsAsync<RawUserRatingTimelineRecord>(
+                $"comic_ratings?select=comic_id,score,created_at,updated_at&user_id=eq.{Uri.EscapeDataString(userId)}&order=updated_at.desc.nullslast,created_at.desc&limit={safeLimit}");
+        }
+
         private async Task<Dictionary<long, RawComicRecord>> GetComicRecordsByIdsAsync(List<long> comicIds)
         {
             if (comicIds.Count == 0) return new Dictionary<long, RawComicRecord>();
@@ -957,6 +1719,34 @@ namespace hanabimanga.Services
             return records
                 .GroupBy(record => record.Id)
                 .ToDictionary(group => group.Key, group => group.First());
+        }
+
+        private async Task<Dictionary<string, RawProfileSummaryRecord>> GetProfilesByIdsAsync(List<string> userIds)
+        {
+            if (userIds.Count == 0)
+            {
+                return new Dictionary<string, RawProfileSummaryRecord>();
+            }
+
+            var ids = string.Join(
+                ",",
+                userIds
+                    .Where(userId => !string.IsNullOrWhiteSpace(userId))
+                    .Distinct(StringComparer.Ordinal)
+                    .Select(Uri.EscapeDataString));
+
+            if (string.IsNullOrWhiteSpace(ids))
+            {
+                return new Dictionary<string, RawProfileSummaryRecord>();
+            }
+
+            var records = await GetRestRecordsAsync<RawProfileSummaryRecord>(
+                $"profiles?select=id,username,display_name,avatar_url&id=in.({ids})&limit={userIds.Count}");
+
+            return records
+                .Where(profile => !string.IsNullOrWhiteSpace(profile.Id))
+                .GroupBy(profile => profile.Id!, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         }
 
         private async Task<RawReaderImageResponse> InvokeReaderImageUrlAsync(
@@ -1148,6 +1938,513 @@ namespace hanabimanga.Services
             _ => 9,
         };
 
+        private static async Task<List<T>> TryGetTaskCenterRecordsAsync<T>(Func<Task<List<T>>> loader)
+        {
+            try
+            {
+                return await loader();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[task-center] REST probe failed: {ex.Message}");
+                return new List<T>();
+            }
+        }
+
+        private static TaskCenterDocument BuildTaskCenterDocument(
+            string userId,
+            List<RawPointLedgerRecord> ledgerRows,
+            List<RawTaskDefinitionRecord> taskDefinitions,
+            List<RawUserTaskProgressRecord> progressRows,
+            List<RawPointProductRecord> products,
+            int todayCommentCount,
+            int todayReadProgress)
+        {
+            var document = new TaskCenterDocument();
+            var now = DateTime.Now;
+            var today = now.Date;
+            var ledger = ledgerRows
+                .Where(row => string.IsNullOrWhiteSpace(userId) ||
+                    string.Equals(row.UserId, userId, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(row => row.CreatedAt ?? DateTime.MinValue)
+                .ToList();
+
+            document.EarnedPoints = ledger.Where(row => row.Amount > 0).Sum(row => row.Amount);
+            document.SpentPoints = Math.Abs(ledger.Where(row => row.Amount < 0).Sum(row => row.Amount));
+            document.Points = Math.Max(0, document.EarnedPoints - document.SpentPoints);
+            document.TodayPoints = ledger
+                .Where(row => row.Amount > 0 && ToLocalDate(row.CreatedAt) == today)
+                .Sum(row => row.Amount);
+            document.HasSignedInToday = ledger.Any(row =>
+                row.Amount > 0 &&
+                ToLocalDate(row.CreatedAt) == today &&
+                IsSignInReason(row.Reason));
+            document.SignInStreak = CalculateSignInStreak(ledger, today);
+            document.SignInDays = BuildSignInDays(ledger, today);
+            document.Transactions = ledger
+                .Select(row => new PointTransaction
+                {
+                    Id = row.Id.ToString(CultureInfo.InvariantCulture),
+                    Title = FormatLedgerReason(row.Reason),
+                    TimeText = FormatRelativeTime(row.CreatedAt),
+                    Amount = row.Amount,
+                    Type = row.Amount >= 0 ? "income" : "expense",
+                })
+                .ToList();
+            document.ExchangeRecords = ledger
+                .Where(row => row.Amount < 0 && IsExchangeReason(row.Reason))
+                .Select(row => new ExchangeRecord
+                {
+                    Id = row.Id.ToString(CultureInfo.InvariantCulture),
+                    Title = FormatLedgerReason(row.Reason),
+                    Points = Math.Abs(row.Amount),
+                    CreatedAt = row.CreatedAt ?? DateTime.UtcNow,
+                    StatusText = "已兑换",
+                })
+                .ToList();
+
+            var tasks = BuildTaskItems(taskDefinitions, progressRows, todayCommentCount, todayReadProgress);
+            document.DailyTasks = tasks.Where(task => task.Category == "daily").Select(task => task.Item).ToList();
+            document.OneTimeTasks = tasks.Where(task => task.Category == "once").Select(task => task.Item).ToList();
+            document.LongTermTasks = tasks.Where(task => task.Category == "long").Select(task => task.Item).ToList();
+            if (document.DailyTasks.Count == 0)
+            {
+                document.DailyTasks = BuildDefaultDailyTasks(todayCommentCount, todayReadProgress);
+            }
+            if (document.OneTimeTasks.Count == 0)
+            {
+                document.OneTimeTasks = BuildDefaultOneTimeTasks(progressRows);
+            }
+            if (document.LongTermTasks.Count == 0)
+            {
+                document.LongTermTasks = BuildDefaultLongTermTasks(progressRows);
+            }
+
+            document.StoreItems = BuildPointStoreItems(products, document.Points);
+            return document;
+        }
+
+        private static List<(string Category, TaskCenterTaskItem Item)> BuildTaskItems(
+            List<RawTaskDefinitionRecord> definitions,
+            List<RawUserTaskProgressRecord> progressRows,
+            int todayCommentCount,
+            int todayReadProgress)
+        {
+            var periodKey = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var progressByTask = progressRows
+                .GroupBy(row => row.TaskId)
+                .ToDictionary(group => group.Key, group => group.ToList());
+            var items = new List<(string Category, TaskCenterTaskItem Item)>();
+
+            foreach (var definition in definitions.OrderBy(row => row.SortOrder ?? 0))
+            {
+                var title = string.IsNullOrWhiteSpace(definition.Title)
+                    ? $"任务 {definition.Id}"
+                    : definition.Title!;
+                var template = ResolveTaskTemplate(title, definition.TaskType, definition.Category);
+                var hasProgress = progressByTask.TryGetValue(definition.Id, out var progress) &&
+                    progress.Any(row =>
+                        string.IsNullOrWhiteSpace(row.PeriodKey) ||
+                        string.Equals(row.PeriodKey, periodKey, StringComparison.OrdinalIgnoreCase) ||
+                        template.Category != "daily");
+                var current = template.Kind switch
+                {
+                    "read" => Math.Min(todayReadProgress, template.Target),
+                    "comment" => Math.Min(todayCommentCount, template.Target),
+                    _ => hasProgress ? template.Target : 0,
+                };
+
+                items.Add((template.Category, new TaskCenterTaskItem
+                {
+                    Id = definition.Id.ToString(CultureInfo.InvariantCulture),
+                    Title = title,
+                    Description = string.IsNullOrWhiteSpace(definition.Description)
+                        ? template.Description
+                        : definition.Description!,
+                    RewardPoints = template.RewardPoints,
+                    Current = current,
+                    Target = template.Target,
+                    IsCompleted = current >= template.Target || hasProgress,
+                    IsClaimed = hasProgress,
+                    IsRepeatable = template.IsRepeatable,
+                    IconGlyph = template.IconGlyph,
+                }));
+            }
+
+            return items;
+        }
+
+        private static List<TaskCenterTaskItem> BuildDefaultDailyTasks(int todayCommentCount, int todayReadProgress)
+            =>
+            [
+                new TaskCenterTaskItem
+                {
+                    Id = "daily-read",
+                    Title = "每日阅读",
+                    Description = todayReadProgress >= 20 ? "今日阅读任务已完成" : $"再读 {20 - todayReadProgress} 页得 25 积分",
+                    RewardPoints = 25,
+                    Current = todayReadProgress,
+                    Target = 20,
+                    IsCompleted = todayReadProgress >= 20,
+                    IconGlyph = "\uE8F1",
+                },
+                new TaskCenterTaskItem
+                {
+                    Id = "daily-comment",
+                    Title = "每日评论",
+                    Description = todayCommentCount >= 2 ? "今日评论任务已完成" : $"再留 {2 - todayCommentCount} 条得 15 积分",
+                    RewardPoints = 15,
+                    Current = todayCommentCount,
+                    Target = 2,
+                    IsCompleted = todayCommentCount >= 2,
+                    IconGlyph = "\uE8F2",
+                },
+            ];
+
+        private static List<TaskCenterTaskItem> BuildDefaultOneTimeTasks(List<RawUserTaskProgressRecord> progressRows)
+        {
+            var isDone = progressRows.Any(row => row.TaskId == 1);
+            return
+            [
+                new TaskCenterTaskItem
+                {
+                    Id = "verify-email",
+                    Title = "验证邮箱",
+                    Description = "验证你的邮箱以解锁邀请奖励等功能",
+                    RewardPoints = 100,
+                    Current = isDone ? 1 : 0,
+                    Target = 1,
+                    IsCompleted = isDone,
+                    IsClaimed = isDone,
+                    IconGlyph = "\uE73E",
+                },
+            ];
+        }
+
+        private static List<TaskCenterTaskItem> BuildDefaultLongTermTasks(List<RawUserTaskProgressRecord> progressRows)
+        {
+            var isDone = progressRows.Any(row => row.TaskId == 2);
+            return
+            [
+                new TaskCenterTaskItem
+                {
+                    Id = "invite-friend",
+                    Title = "邀请好友",
+                    Description = "完成 1 次得 800 积分",
+                    RewardPoints = 800,
+                    Current = isDone ? 1 : 0,
+                    Target = 1,
+                    IsCompleted = isDone,
+                    IsClaimed = isDone,
+                    IsRepeatable = true,
+                    IconGlyph = "\uE8F8",
+                },
+            ];
+        }
+
+        private static (string Kind, string Category, int RewardPoints, int Target, bool IsRepeatable, string IconGlyph, string Description)
+            ResolveTaskTemplate(string title, string? taskType, string? category)
+        {
+            var key = $"{title} {taskType} {category}".ToLowerInvariant();
+            if (key.Contains("read", StringComparison.Ordinal) || key.Contains("阅读", StringComparison.Ordinal))
+            {
+                return ("read", "daily", 25, 20, false, "\uE8F1", "阅读 20 页可获得积分");
+            }
+
+            if (key.Contains("comment", StringComparison.Ordinal) || key.Contains("评论", StringComparison.Ordinal))
+            {
+                return ("comment", "daily", 15, 2, false, "\uE8F2", "留下 2 条评论可获得积分");
+            }
+
+            if (key.Contains("sign", StringComparison.Ordinal) ||
+                key.Contains("check", StringComparison.Ordinal) ||
+                key.Contains("签到", StringComparison.Ordinal))
+            {
+                return ("signin", "daily", 20, 1, false, "\uE787", "完成每日签到可获得积分");
+            }
+
+            if (key.Contains("invite", StringComparison.Ordinal) || key.Contains("邀请", StringComparison.Ordinal))
+            {
+                return ("invite", "long", 800, 1, true, "\uE8F8", "邀请好友可获得积分");
+            }
+
+            if (key.Contains("email", StringComparison.Ordinal) || key.Contains("邮箱", StringComparison.Ordinal))
+            {
+                return ("email", "once", 100, 1, false, "\uE73E", "验证邮箱可获得积分");
+            }
+
+            if (key.Contains("once", StringComparison.Ordinal) || key.Contains("一次", StringComparison.Ordinal))
+            {
+                return ("custom", "once", 10, 1, false, "\uE73E", "完成任务可获得积分");
+            }
+
+            if (key.Contains("long", StringComparison.Ordinal) || key.Contains("长期", StringComparison.Ordinal))
+            {
+                return ("custom", "long", 10, 1, true, "\uE8F8", "完成任务可获得积分");
+            }
+
+            return ("custom", "daily", 10, 1, false, "\uE8F1", "完成任务可获得积分");
+        }
+
+        private static List<PointStoreItem> BuildPointStoreItems(List<RawPointProductRecord> products, int availablePoints)
+        {
+            var items = products
+                .Where(product => product.IsActive != false &&
+                    string.Equals(product.Type, "subscription", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(product => product.SortOrder ?? 0)
+                .Select(product =>
+                {
+                    var days = Math.Max(1, product.DurationDays ?? 1);
+                    var points = EstimateVipPointCost(days, product.Price);
+                    return new PointStoreItem
+                    {
+                        Id = string.IsNullOrWhiteSpace(product.Id) ? $"vip-{days}" : product.Id!,
+                        Category = "virtual",
+                        Title = string.IsNullOrWhiteSpace(product.Name) ? $"{days} 天 VIP" : product.Name!,
+                        Description = $"使用 {points} 积分兑换 {days} 天 VIP 会员",
+                        Points = points,
+                        Stock = product.StockLimit is { } stockLimit
+                            ? Math.Max(0, stockLimit - (product.SalesCount ?? 0))
+                            : 0,
+                        ImageUrl = product.ImageUrl,
+                        IconGlyph = "\uE7BF",
+                        AvailablePoints = availablePoints,
+                    };
+                })
+                .ToList();
+
+            if (items.Count == 0)
+            {
+                items.Add(new PointStoreItem
+                {
+                    Id = "vip-7d",
+                    Category = "virtual",
+                    Title = "7 天 VIP",
+                    Description = "使用 800 积分兑换 7 天 VIP 会员",
+                    Points = 800,
+                    IconGlyph = "\uE7BF",
+                    AvailablePoints = availablePoints,
+                });
+                items.Add(new PointStoreItem
+                {
+                    Id = "vip-1d",
+                    Category = "virtual",
+                    Title = "1 天 VIP",
+                    Description = "使用 250 积分兑换 1 天 VIP 会员",
+                    Points = 250,
+                    IconGlyph = "\uE7BF",
+                    AvailablePoints = availablePoints,
+                });
+            }
+
+            items.AddRange(BuildPhysicalRewardItems(availablePoints));
+            return items;
+        }
+
+        private static IEnumerable<PointStoreItem> BuildPhysicalRewardItems(int availablePoints)
+        {
+            return
+            [
+                new PointStoreItem
+                {
+                    Id = "acrylic-charm",
+                    Category = "physical",
+                    Title = "亚克力挂件",
+                    Description = "使用 1200 积分兑换一枚亚克力挂件",
+                    Points = 1200,
+                    Stock = 997,
+                    IconGlyph = "\uE7C3",
+                    AvailablePoints = availablePoints,
+                },
+                new PointStoreItem
+                {
+                    Id = "towel",
+                    Category = "physical",
+                    Title = "麻薯素毛毯",
+                    Description = "使用 4000 积分兑换三袋麻薯素毛毯",
+                    Points = 4000,
+                    Stock = 999,
+                    IconGlyph = "\uE790",
+                    AvailablePoints = availablePoints,
+                },
+                new PointStoreItem
+                {
+                    Id = "cookies",
+                    Category = "physical",
+                    Title = "曲奇饼干",
+                    Description = "使用 8000 积分兑换三袋曲奇饼干",
+                    Points = 8000,
+                    Stock = 998,
+                    IconGlyph = "\uE7C1",
+                    AvailablePoints = availablePoints,
+                },
+                new PointStoreItem
+                {
+                    Id = "desk-pad",
+                    Category = "physical",
+                    Title = "动漫鼠标垫",
+                    Description = "使用 12000 积分兑换一张动漫鼠标垫",
+                    Points = 12000,
+                    Stock = 996,
+                    IconGlyph = "\uE8A7",
+                    AvailablePoints = availablePoints,
+                },
+                new PointStoreItem
+                {
+                    Id = "food-box",
+                    Category = "physical",
+                    Title = "哈基米南北绿豆浆",
+                    Description = "使用 13800 积分兑换一箱限定饮品",
+                    Points = 13800,
+                    Stock = 998,
+                    IconGlyph = "\uE8D4",
+                    AvailablePoints = availablePoints,
+                },
+                new PointStoreItem
+                {
+                    Id = "figure-custom",
+                    Category = "physical",
+                    Title = "128 元内手办自选",
+                    Description = "使用 80000 积分兑换 128 元以内的手办",
+                    Points = 80000,
+                    Stock = 998,
+                    IconGlyph = "\uE7C3",
+                    AvailablePoints = availablePoints,
+                },
+            ];
+        }
+
+        private static int EstimateVipPointCost(int durationDays, decimal price)
+        {
+            if (durationDays <= 1) return 250;
+            if (durationDays <= 7) return 800;
+            var fromDays = durationDays * 220;
+            var fromPrice = (int)Math.Round(price * 1000m, MidpointRounding.AwayFromZero);
+            return Math.Max(fromDays, fromPrice);
+        }
+
+        private static List<TaskCenterSignInDay> BuildSignInDays(
+            List<RawPointLedgerRecord> ledger,
+            DateTime today)
+        {
+            var culture = new CultureInfo("zh-CN");
+            var defaults = new[] { 10, 15, 20, 10, 15, 15, 20 };
+            var start = today.AddDays(-6);
+            var result = new List<TaskCenterSignInDay>();
+
+            for (var i = 0; i < 7; i++)
+            {
+                var date = start.AddDays(i);
+                var signedRows = ledger.Where(row =>
+                    IsSignInReason(row.Reason) &&
+                    ToLocalDate(row.CreatedAt) == date)
+                    .ToList();
+                var points = signedRows.Where(row => row.Amount > 0).Sum(row => row.Amount);
+                result.Add(new TaskCenterSignInDay
+                {
+                    Label = culture.DateTimeFormat.GetAbbreviatedDayName(date.DayOfWeek),
+                    Points = points > 0 ? points : defaults[i],
+                    IsChecked = signedRows.Count > 0,
+                    IsToday = date == today,
+                });
+            }
+
+            return result;
+        }
+
+        private static int CalculateSignInStreak(List<RawPointLedgerRecord> ledger, DateTime today)
+        {
+            var streak = 0;
+            for (var date = today; date >= today.AddDays(-30); date = date.AddDays(-1))
+            {
+                if (!ledger.Any(row => IsSignInReason(row.Reason) && ToLocalDate(row.CreatedAt) == date))
+                {
+                    break;
+                }
+
+                streak++;
+            }
+
+            return streak;
+        }
+
+        private static DateTime? ToLocalDate(DateTime? time)
+        {
+            if (time == null) return null;
+            return (time.Value.Kind == DateTimeKind.Utc ? time.Value.ToLocalTime() : time.Value).Date;
+        }
+
+        private static bool IsSignInReason(string? reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) return false;
+            var normalized = reason.ToLowerInvariant();
+            return normalized.Contains("sign", StringComparison.Ordinal) ||
+                normalized.Contains("check", StringComparison.Ordinal) ||
+                normalized.Contains("签到", StringComparison.Ordinal);
+        }
+
+        private static bool IsExchangeReason(string? reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) return false;
+            var normalized = reason.ToLowerInvariant();
+            return normalized.Contains("exchange", StringComparison.Ordinal) ||
+                normalized.Contains("redeem", StringComparison.Ordinal) ||
+                normalized.Contains("兑换", StringComparison.Ordinal);
+        }
+
+        private static string FormatLedgerReason(string? reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) return "积分变动";
+
+            var normalized = reason.Trim().ToLowerInvariant();
+            if (normalized.Contains("read", StringComparison.Ordinal) || normalized.Contains("阅读", StringComparison.Ordinal))
+            {
+                return "每日阅读";
+            }
+            if (normalized.Contains("comment", StringComparison.Ordinal) || normalized.Contains("评论", StringComparison.Ordinal))
+            {
+                return "每日评论";
+            }
+            if (normalized.Contains("sign", StringComparison.Ordinal) ||
+                normalized.Contains("check", StringComparison.Ordinal) ||
+                normalized.Contains("签到", StringComparison.Ordinal))
+            {
+                return "每日签到";
+            }
+            if (normalized.Contains("email", StringComparison.Ordinal) || normalized.Contains("邮箱", StringComparison.Ordinal))
+            {
+                return "验证邮箱";
+            }
+            if (normalized.Contains("invite", StringComparison.Ordinal) || normalized.Contains("邀请", StringComparison.Ordinal))
+            {
+                return "邀请好友";
+            }
+            if (normalized.Contains("exchange", StringComparison.Ordinal) ||
+                normalized.Contains("redeem", StringComparison.Ordinal) ||
+                normalized.Contains("兑换", StringComparison.Ordinal))
+            {
+                return "积分兑换";
+            }
+
+            return reason.Trim();
+        }
+
+        private static string FormatRelativeTime(DateTime? time)
+        {
+            if (time == null) return "";
+            var localTime = time.Value.Kind == DateTimeKind.Utc
+                ? time.Value.ToLocalTime()
+                : time.Value;
+            var elapsed = DateTime.Now - localTime;
+
+            if (elapsed.TotalMinutes < 1) return "刚刚";
+            if (elapsed.TotalHours < 1) return $"{Math.Max(1, (int)elapsed.TotalMinutes)} 分钟前";
+            if (elapsed.TotalDays < 1) return $"{Math.Max(1, (int)elapsed.TotalHours)} 小时前";
+            if (elapsed.TotalDays < 7) return $"{Math.Max(1, (int)elapsed.TotalDays)} 天前";
+
+            return localTime.ToString("yyyy-MM-dd");
+        }
+
         private async Task<T?> GetSingleRestRecordAsync<T>(
             string tableName,
             string selectColumns,
@@ -1171,6 +2468,7 @@ namespace hanabimanga.Services
             request.Headers.TryAddWithoutValidation("apikey", _supabaseAnonKey);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _supabaseAnonKey);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.TryAddWithoutValidation("Accept-Profile", "public");
 
             using var response = await _httpClient.SendAsync(request);
             var body = await response.Content.ReadAsStringAsync();
@@ -1183,6 +2481,22 @@ namespace hanabimanga.Services
             }
 
             return JsonConvert.DeserializeObject<List<T>>(body) ?? new List<T>();
+        }
+
+        private async Task<List<T>> GetRestRecordsWithOptionalAuthAsync<T>(string relativePath)
+        {
+            var token = CurrentSession?.AccessToken;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return await GetRestRecordsAsync<T>(relativePath);
+            }
+
+            return await SendRestAsync<List<T>>(
+                HttpMethod.Get,
+                relativePath,
+                token,
+                content: null,
+                parseList: true) ?? new List<T>();
         }
 
         private async Task<List<T>> GetAuthenticatedRestRecordsAsync<T>(string relativePath)
@@ -1297,6 +2611,8 @@ namespace hanabimanga.Services
             request.Headers.TryAddWithoutValidation("apikey", _supabaseAnonKey);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            request.Headers.TryAddWithoutValidation("Accept-Profile", "public");
+            request.Headers.TryAddWithoutValidation("Content-Profile", "public");
             if (!string.IsNullOrWhiteSpace(prefer))
             {
                 request.Headers.TryAddWithoutValidation("Prefer", prefer);
@@ -1371,6 +2687,49 @@ namespace hanabimanga.Services
 
             return CurrentUser!.Id!;
         }
+
+        private ComicComment MapComment(RawCommentRecord record, RawProfileSummaryRecord? profile)
+        {
+            var displayName = profile?.DisplayName;
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = profile?.Username;
+            }
+
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                displayName = "花火用户";
+            }
+
+            var userId = record.UserId ?? "";
+            return new ComicComment
+            {
+                Id = record.Id,
+                ComicId = record.ComicId,
+                ChapterId = record.ChapterId,
+                UserId = userId,
+                Content = record.Content ?? "",
+                Status = string.IsNullOrWhiteSpace(record.Status) ? "public" : record.Status!,
+                IsSpoiler = record.IsSpoiler == true,
+                LikeCount = record.LikeCount ?? 0,
+                ReplyCount = record.ReplyCount ?? 0,
+                CreatedAt = record.CreatedAt,
+                UpdatedAt = record.UpdatedAt,
+                DisplayName = displayName,
+                Username = profile?.Username,
+                AvatarUrl = profile?.AvatarUrl,
+                IsMine = !string.IsNullOrWhiteSpace(CurrentUser?.Id) &&
+                    string.Equals(CurrentUser!.Id, userId, StringComparison.Ordinal),
+            };
+        }
+
+        private static string GetCommentStatusLabel(string? status) => status switch
+        {
+            "pending" => "审核中",
+            "shadow_banned" => "仅自己可见",
+            "rejected" => "未通过",
+            _ => "评论",
+        };
 
         private static HomeFeedResponse MapHomeFeed(RawHomeFeedData data)
         {
@@ -1477,6 +2836,23 @@ namespace hanabimanga.Services
                 ComicId = record.Id,
                 Title = record.Title ?? "",
                 Subtitle = $"{status} · {chapters} · {rating}",
+                CoverUrl = record.CoverUrl,
+            };
+        }
+
+        private static ComicListItem MapFilteredComic(RawRankingComicRecord record)
+        {
+            var status = record.IsFinished ? "完结" : "连载中";
+            var rating = record.RatingCount is > 0
+                ? $"评分 {record.RatingAverage ?? 0:0.0}"
+                : "暂无评分";
+
+            return new ComicListItem
+            {
+                Id = record.Id.ToString(CultureInfo.InvariantCulture),
+                ComicId = record.Id,
+                Title = record.Title ?? "",
+                Subtitle = $"{status} · {rating}",
                 CoverUrl = record.CoverUrl,
             };
         }

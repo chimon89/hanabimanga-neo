@@ -19,6 +19,7 @@ namespace hanabimanga.ViewModels
 
         public ObservableCollection<UserBadgeItem> Badges { get; } = new();
         public ObservableCollection<AvatarPresetOption> AvatarPresets { get; } = new();
+        public ObservableCollection<BannerPresetOption> BannerPresets { get; } = new();
 
         public bool IsLoading
         {
@@ -80,6 +81,10 @@ namespace hanabimanga.ViewModels
         public string Username => _document?.Profile.Username ?? "";
         public string DisplayName => _document?.Profile.DisplayName ?? "";
         public string CurrentAvatarPreviewUrl => ToAvatarPreviewUrl(_document?.Profile.AvatarUrl);
+        public string CurrentBannerPreviewUrl => ToAssetPreviewUrl(
+            _document?.Profile.BannerUrl,
+            "banner",
+            "ic_banner_default.webp");
         public bool IsVip => _document?.Profile.VipExpirationDate is { } expiresAt && expiresAt > DateTime.UtcNow;
         public bool CanUploadCustomAvatar => IsVip;
         public string CustomAvatarHint => IsVip
@@ -146,6 +151,30 @@ namespace hanabimanga.ViewModels
             {
                 _document!.Profile = await SupabaseService.Instance.SetCurrentUserAvatarAsync(fileName);
                 FeedbackMessage = "头像已更新。";
+                RefreshProfileProperties();
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+            }
+            finally
+            {
+                IsSaving = false;
+            }
+        }
+
+        public async Task SelectPresetBannerAsync(string fileName)
+        {
+            if (IsSaving || string.IsNullOrWhiteSpace(fileName)) return;
+
+            IsSaving = true;
+            ErrorMessage = null;
+            FeedbackMessage = null;
+
+            try
+            {
+                _document!.Profile = await SupabaseService.Instance.SetCurrentUserBannerAsync(fileName);
+                FeedbackMessage = "个人页横幅已更新。";
                 RefreshProfileProperties();
             }
             catch (Exception ex)
@@ -235,9 +264,15 @@ namespace hanabimanga.ViewModels
             }
         }
 
-        public async Task UpdatePasswordAsync(string password, string confirmation)
+        public async Task UpdatePasswordAsync(string currentPassword, string password, string confirmation)
         {
             if (IsSaving) return;
+
+            if (string.IsNullOrWhiteSpace(currentPassword))
+            {
+                ErrorMessage = "请输入当前密码。";
+                return;
+            }
 
             if (password != confirmation)
             {
@@ -251,7 +286,7 @@ namespace hanabimanga.ViewModels
 
             try
             {
-                await SupabaseService.Instance.UpdateCurrentUserPasswordAsync(password);
+                await SupabaseService.Instance.UpdateCurrentUserPasswordAsync(currentPassword, password);
                 FeedbackMessage = "密码已更新。";
             }
             catch (Exception ex)
@@ -278,6 +313,7 @@ namespace hanabimanga.ViewModels
         {
             Badges.Clear();
             AvatarPresets.Clear();
+            BannerPresets.Clear();
 
             if (_document != null)
             {
@@ -289,6 +325,11 @@ namespace hanabimanga.ViewModels
                 foreach (var preset in _document.AvatarPresets)
                 {
                     AvatarPresets.Add(preset);
+                }
+
+                foreach (var preset in _document.BannerPresets)
+                {
+                    BannerPresets.Add(preset);
                 }
             }
 
@@ -302,27 +343,37 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(Username));
             OnPropertyChanged(nameof(DisplayName));
             OnPropertyChanged(nameof(CurrentAvatarPreviewUrl));
+            OnPropertyChanged(nameof(CurrentBannerPreviewUrl));
             OnPropertyChanged(nameof(IsVip));
             OnPropertyChanged(nameof(CanUploadCustomAvatar));
             OnPropertyChanged(nameof(CustomAvatarHint));
         }
 
         private static string ToAvatarPreviewUrl(string? avatarUrl)
+            => ToAssetPreviewUrl(avatarUrl, "avatar", "ic_avatar_default.webp");
+
+        private static string ToAssetPreviewUrl(string? value, string folder, string fallback)
         {
-            if (string.IsNullOrWhiteSpace(avatarUrl))
+            if (string.IsNullOrWhiteSpace(value))
             {
-                return "ms-appx:///Assets/avatar/ic_avatar_default.webp";
+                return $"ms-appx:///Assets/{folder}/{fallback}";
             }
 
-            if (Uri.TryCreate(avatarUrl, UriKind.Absolute, out _))
+            if (Uri.TryCreate(value, UriKind.Absolute, out _))
             {
-                return avatarUrl;
+                return value;
             }
 
-            var fileName = Path.GetFileName(avatarUrl.Trim().Replace('\\', '/'));
+            var fileName = Path.GetFileName(value.Trim().Replace('\\', '/'));
+            if (!string.IsNullOrWhiteSpace(fileName) &&
+                string.IsNullOrWhiteSpace(Path.GetExtension(fileName)))
+            {
+                fileName += ".webp";
+            }
+
             return string.IsNullOrWhiteSpace(fileName)
-                ? "ms-appx:///Assets/avatar/ic_avatar_default.webp"
-                : $"ms-appx:///Assets/avatar/{fileName}";
+                ? $"ms-appx:///Assets/{folder}/{fallback}"
+                : $"ms-appx:///Assets/{folder}/{fileName}";
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

@@ -101,5 +101,13 @@ namespace hanabimanga.Pages
                 });
             }
         }
+
+        private void CommentsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var parameter = ViewModel.CreateCommentsNavigationParameter();
+            if (parameter == null) return;
+
+            Frame.Navigate(typeof(ComicCommentsPage), parameter);
+        }
     }
 }

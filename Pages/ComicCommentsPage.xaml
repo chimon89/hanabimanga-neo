@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="hanabimanga.Pages.ComicCommentsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:hanabimanga.Converters"
+    xmlns:models="using:hanabimanga.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <converters:StringToImageSourceConverter x:Key="StringToImageSource" />
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+    </Page.Resources>
+
+    <Grid>
+        <ScrollViewer
+            x:Name="CommentsScrollViewer"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <Grid
+                Width="{Binding ElementName=CommentsScrollViewer, Path=ViewportWidth}"
+                MinHeight="{Binding ElementName=CommentsScrollViewer, Path=ViewportHeight}"
+                MaxWidth="920"
+                Padding="32,18,32,32"
+                HorizontalAlignment="Center"
+                RowSpacing="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button
+                        Width="38"
+                        Height="38"
+                        Padding="0"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="BackButton_Click"
+                        ToolTipService.ToolTip="返回">
+                        <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                    </Button>
+
+                    <StackPanel
+                        Grid.Column="1"
+                        MinWidth="0"
+                        Spacing="3">
+                        <TextBlock
+                            Text="{x:Bind ViewModel.PageTitle, Mode=OneWay}"
+                            FontSize="28"
+                            FontWeight="SemiBold" />
+                        <TextBlock
+                            Text="{x:Bind ViewModel.PageSubtitle, Mode=OneWay}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            MaxLines="1"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <Button
+                        Grid.Column="2"
+                        Padding="12,6"
+                        VerticalAlignment="Center"
+                        Click="RefreshButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE72C;" FontSize="13" />
+                            <TextBlock Text="刷新" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <ProgressRing
+                    Grid.Row="1"
+                    HorizontalAlignment="Left"
+                    IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                <StackPanel Grid.Row="2" Spacing="8">
+                    <InfoBar
+                        IsClosable="False"
+                        Severity="Error"
+                        IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                        Title="操作失败"
+                        Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
+                    <InfoBar
+                        IsClosable="False"
+                        Severity="Success"
+                        IsOpen="{x:Bind ViewModel.HasFeedback, Mode=OneWay}"
+                        Title="已提交"
+                        Message="{x:Bind ViewModel.FeedbackMessage, Mode=OneWay}" />
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Row="3"
+                    Spacing="16">
+                    <Border
+                        Padding="16"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        Visibility="{x:Bind ViewModel.IsSignedIn, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel Spacing="12">
+                            <TextBox
+                                x:Name="CommentTextBox"
+                                Header="在此留下评论"
+                                AcceptsReturn="True"
+                                MaxLength="1000"
+                                MinHeight="108"
+                                TextWrapping="Wrap"
+                                PlaceholderText="写下你的想法" />
+
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <CheckBox
+                                    x:Name="SpoilerCheckBox"
+                                    Content="包含剧透"
+                                    VerticalAlignment="Center" />
+
+                                <Button
+                                    Grid.Column="1"
+                                    Style="{ThemeResource AccentButtonStyle}"
+                                    IsEnabled="{x:Bind ViewModel.CanSubmit, Mode=OneWay}"
+                                    Click="SubmitCommentButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE724;" FontSize="13" />
+                                        <TextBlock Text="发布评论" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border
+                        Padding="16"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        Visibility="{x:Bind ViewModel.NeedsSignIn, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <Grid ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <FontIcon
+                                Glyph="&#xE8D7;"
+                                FontSize="22"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Spacing="2">
+                                <TextBlock
+                                    Text="登录后可以发表评论"
+                                    FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="已发布内容可能在审核后调整可见范围"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <Button
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="SignInButton_Click">
+                                <TextBlock Text="去登录" />
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Text="评论列表"
+                            FontSize="18"
+                            FontWeight="SemiBold" />
+                        <TextBlock
+                            Grid.Column="1"
+                            Text="{x:Bind ViewModel.CommentCountText, Mode=OneWay}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+
+                    <ItemsRepeater
+                        ItemsSource="{x:Bind ViewModel.Comments, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.HasComments, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Orientation="Vertical" Spacing="10" />
+                        </ItemsRepeater.Layout>
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="models:ComicComment">
+                                <Border
+                                    Padding="14"
+                                    CornerRadius="8"
+                                    BorderThickness="1"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="42" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button
+                                            Width="38"
+                                            Height="38"
+                                            Padding="0"
+                                            CornerRadius="19"
+                                            Background="{ThemeResource AccentFillColorTertiaryBrush}"
+                                            BorderThickness="0"
+                                            Tag="{x:Bind UserId}"
+                                            Click="CommentAuthor_Click"
+                                            ToolTipService.ToolTip="{x:Bind DisplayName}">
+                                            <Image
+                                                Source="{x:Bind AvatarPreviewUrl, Converter={StaticResource StringToImageSource}}"
+                                                Stretch="UniformToFill" />
+                                        </Button>
+
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            MinWidth="0"
+                                            Spacing="6">
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel
+                                                    Orientation="Horizontal"
+                                                    Spacing="8">
+                                                    <TextBlock
+                                                        Text="{x:Bind DisplayName}"
+                                                        FontWeight="SemiBold"
+                                                        MaxLines="1"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <Border
+                                                        Padding="7,2"
+                                                        CornerRadius="6"
+                                                        Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                                        Visibility="{x:Bind HasStatusNote, Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock
+                                                            Text="{x:Bind StatusText}"
+                                                            FontSize="11"
+                                                            FontWeight="SemiBold" />
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    Text="{x:Bind CreatedAtText}"
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </Grid>
+
+                                            <TextBlock
+                                                Text="{x:Bind Content}"
+                                                TextWrapping="WrapWholeWords"
+                                                LineHeight="22" />
+
+                                            <TextBlock
+                                                Text="{x:Bind MetaText}"
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Visibility="{x:Bind HasMetaText, Converter={StaticResource BoolToVisibility}}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
+
+                    <StackPanel
+                        MinHeight="220"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="10"
+                        Visibility="{x:Bind ViewModel.HasNoComments, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <FontIcon
+                            HorizontalAlignment="Center"
+                            Glyph="&#xE8F2;"
+                            FontSize="40"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock
+                            Text="还没有评论"
+                            HorizontalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Page>

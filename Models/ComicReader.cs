@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel;
 using Newtonsoft.Json;
 
 namespace hanabimanga.Models
@@ -40,11 +41,53 @@ namespace hanabimanga.Models
         public bool IsVip { get; set; }
     }
 
-    public sealed class ReaderPageImage
+    public sealed class ReaderPageImage : INotifyPropertyChanged
     {
         public int PageNumber { get; set; }
         public string PageLabel => PageNumber.ToString("000");
-        public string Url { get; set; } = "";
+        private string _url = "";
+        public string Url
+        {
+            get => _url;
+            set
+            {
+                if (_url == value) return;
+                _url = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Url)));
+            }
+        }
+
+        public string OriginalUrl { get; set; } = "";
+
+        private string? _localCachePath;
+        public string? LocalCachePath
+        {
+            get => _localCachePath;
+            set
+            {
+                if (_localCachePath == value) return;
+                _localCachePath = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LocalCachePath)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsCached)));
+            }
+        }
+
+        public bool IsCached => !string.IsNullOrWhiteSpace(LocalCachePath);
+
+        // 该页图片资源是否加载失败(404 / 网络错误),用于在阅读器内显示友好提示
+        private bool _loadFailed;
+        public bool LoadFailed
+        {
+            get => _loadFailed;
+            set
+            {
+                if (_loadFailed == value) return;
+                _loadFailed = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LoadFailed)));
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 
     internal sealed class RawReaderImageResponse

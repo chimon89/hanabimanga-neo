@@ -19,7 +19,13 @@ namespace hanabimanga.Models
         [Column("avatar_url")]
         public string? AvatarUrl { get; set; }
 
+        [Column("banner_url")]
+        public string? BannerUrl { get; set; }
+
         [Column("vip_expiration_date")]
         public DateTime? VipExpirationDate { get; set; }
+
+        [Column("created_at")]
+        public DateTime? CreatedAt { get; set; }
     }
 }

@@ -25,9 +25,9 @@
                 Width="{Binding ElementName=RankingScrollViewer, Path=ViewportWidth}"
                 MinHeight="{Binding ElementName=RankingScrollViewer, Path=ViewportHeight}"
                 MaxWidth="1180"
-                Padding="32,18,32,32"
+                Padding="32,10,32,32"
                 HorizontalAlignment="Center"
-                RowSpacing="16">
+                RowSpacing="8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -40,13 +40,14 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel MinWidth="0" Spacing="4">
+                    <StackPanel MinWidth="0" Spacing="1">
                         <TextBlock
                             Text="排行榜"
-                            FontSize="28"
+                            FontSize="24"
                             FontWeight="SemiBold" />
                         <TextBlock
                             Text="按人气与评分排序的漫画榜单"
+                            FontSize="12"
                             TextWrapping="Wrap"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
@@ -70,11 +71,11 @@
                     <SelectorBarItem x:Name="DailyItem" Text="日榜" />
                     <SelectorBarItem x:Name="WeeklyItem" Text="周榜" />
                     <SelectorBarItem x:Name="MonthlyItem" Text="月榜" />
-                    <SelectorBarItem x:Name="RatingItem" Text="评分榜" />
-                    <SelectorBarItem x:Name="RatingCountItem" Text="评分数榜" />
+                    <SelectorBarItem x:Name="RatingItem" Text="评分" />
+                    <SelectorBarItem x:Name="RatingCountItem" Text="人气" />
                 </SelectorBar>
 
-                <Grid Grid.Row="2" RowSpacing="18">
+                <Grid Grid.Row="2" RowSpacing="4" Margin="0,-6,0,0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />

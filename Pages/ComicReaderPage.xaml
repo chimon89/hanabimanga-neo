@@ -99,6 +99,51 @@
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         Visibility="{x:Bind ViewModel.ShowUpscaledQuota, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="2"
+                        Visibility="{x:Bind ViewModel.HasReader, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <Button
+                            x:Name="ZoomOutButton"
+                            Width="34"
+                            Height="34"
+                            Padding="0"
+                            Click="ZoomOutButton_Click"
+                            ToolTipService.ToolTip="缩小">
+                            <FontIcon Glyph="&#xE71F;" FontSize="13" />
+                        </Button>
+                        <Button
+                            x:Name="ZoomResetButton"
+                            MinWidth="54"
+                            Height="34"
+                            Padding="8,0"
+                            Click="ZoomResetButton_Click"
+                            ToolTipService.ToolTip="恢复 100%">
+                            <TextBlock
+                                x:Name="ZoomPercentageTextBlock"
+                                Text="100%" />
+                        </Button>
+                        <Button
+                            x:Name="ZoomInButton"
+                            Width="34"
+                            Height="34"
+                            Padding="0"
+                            Click="ZoomInButton_Click"
+                            ToolTipService.ToolTip="放大">
+                            <FontIcon Glyph="&#xE8A3;" FontSize="13" />
+                        </Button>
+                    </StackPanel>
+                    <Button
+                        MinHeight="34"
+                        Padding="10,6"
+                        Click="DownloadChapterButton_Click"
+                        IsEnabled="{x:Bind ViewModel.CanDownloadCurrentChapter, Mode=OneWay}"
+                        ToolTipService.ToolTip="下载本话到本地">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE896;" FontSize="12" />
+                            <TextBlock Text="{x:Bind ViewModel.DownloadButtonText, Mode=OneWay}" />
+                        </StackPanel>
+                    </Button>
                     <Button
                         MinHeight="34"
                         Padding="10,6"
@@ -157,75 +202,259 @@
         </Border>
 
         <Grid Grid.Row="1">
-            <ScrollViewer
-                x:Name="ReaderScrollViewer"
-                HorizontalScrollBarVisibility="Disabled"
-                VerticalScrollBarVisibility="Auto"
-                ZoomMode="Disabled">
-                <StackPanel
-                    Padding="20,18,20,28"
-                    Spacing="12"
-                    HorizontalAlignment="Center">
+            <Grid>
+                <!--  翻页模式:单页按高度 100% 起步,放大后可拖动查看  -->
+                <Grid
+                    x:Name="PageModeHost"
+                    Padding="20,0,20,28"
+                    Visibility="{x:Bind ViewModel.ShowPageContent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <ScrollViewer
+                        x:Name="PageModeZoomScrollViewer"
+                        HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollMode="Enabled"
+                        VerticalScrollMode="Enabled"
+                        ZoomMode="Enabled"
+                        MinZoomFactor="1"
+                        MaxZoomFactor="4"
+                        ViewChanged="PageModeZoomScrollViewer_ViewChanged"
+                        SizeChanged="PageModeZoomScrollViewer_SizeChanged"
+                        PointerPressed="PageModeZoomScrollViewer_PointerPressed"
+                        PointerMoved="PageModeZoomScrollViewer_PointerMoved"
+                        PointerReleased="PageModeZoomScrollViewer_PointerReleased"
+                        PointerCanceled="PageModeZoomScrollViewer_PointerCanceled"
+                        PointerCaptureLost="PageModeZoomScrollViewer_PointerCaptureLost">
+                        <Grid
+                            x:Name="PageModeSurface"
+                            MinWidth="360"
+                            MinHeight="480"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}">
+                            <Image
+                                x:Name="PageModeImage"
+                                Source="{x:Bind ViewModel.CurrentPageUrl, Mode=OneWay, Converter={StaticResource StringToImageSource}}"
+                                Stretch="Fill"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                ImageOpened="ReaderImage_ImageOpened"
+                                ImageFailed="ReaderImage_ImageFailed" />
+                            <StackPanel
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="10"
+                                Padding="24"
+                                Visibility="{x:Bind ViewModel.CurrentPageImage.LoadFailed, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                <FontIcon
+                                    Glyph="&#xE7BA;"
+                                    FontSize="34"
+                                    HorizontalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                <TextBlock
+                                    Text="这一页走丢了"
+                                    FontWeight="SemiBold"
+                                    HorizontalAlignment="Center" />
+                                <TextBlock
+                                    Text="可能是资源不存在,或者网络不太给力,稍后再试试"
+                                    FontSize="12"
+                                    TextAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Button
+                                    HorizontalAlignment="Center"
+                                    Padding="14,6"
+                                    Click="RetryImage_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE72C;" FontSize="12" />
+                                        <TextBlock Text="重新加载" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
 
-                    <ProgressRing
-                        IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                        HorizontalAlignment="Center"
-                        Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-
-                    <InfoBar
-                        IsClosable="False"
-                        Severity="Error"
-                        IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
-                        Title="章节加载失败"
-                        Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
-
-                    <InfoBar
-                        IsClosable="False"
-                        Severity="Warning"
-                        IsOpen="{x:Bind ViewModel.UsesWebFallback, Mode=OneWay}"
-                        Title="当前为 Web 降级资源"
-                        Message="未配置客户端签名密钥时,接口可能返回混淆图片。配置 Reader:AppClientVerifySecret 和 Reader:ClientFingerprint 后可请求原始资源。" />
-
-                    <!--  翻页模式:仅显示当前页  -->
-                    <Grid
-                        MaxWidth="980"
-                        MinWidth="360"
-                        Background="{ThemeResource LayerFillColorDefaultBrush}"
-                        Visibility="{x:Bind ViewModel.ShowPageContent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-                        <Image
-                            Source="{x:Bind ViewModel.CurrentPageUrl, Mode=OneWay, Converter={StaticResource StringToImageSource}}"
-                            Stretch="Uniform"
-                            HorizontalAlignment="Center"
-                            ImageOpened="ReaderImage_ImageOpened"
-                            ImageFailed="ReaderImage_ImageFailed" />
-                    </Grid>
-
-                    <!--  瀑布流模式:本话所有页面纵向排列,ItemsRepeater 虚拟化实现懒加载  -->
-                    <ItemsRepeater
-                        ItemsSource="{x:Bind ViewModel.Pages}"
-                        Visibility="{x:Bind ViewModel.ShowWaterfallContent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-                        <ItemsRepeater.Layout>
-                            <StackLayout Orientation="Vertical" Spacing="8" />
-                        </ItemsRepeater.Layout>
-                        <ItemsRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="models:ReaderPageImage">
-                                <Grid
-                                    MaxWidth="980"
-                                    MinWidth="360"
-                                    MinHeight="640"
-                                    Background="{ThemeResource LayerFillColorDefaultBrush}">
-                                    <Image
-                                        Source="{x:Bind Url, Converter={StaticResource StringToImageSource}}"
-                                        Stretch="Uniform"
+                <!--  瀑布流模式:本话所有页面纵向排列,ItemsRepeater 虚拟化实现懒加载  -->
+                <ScrollViewer
+                    x:Name="ReaderScrollViewer"
+                    HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollMode="Enabled"
+                    VerticalScrollMode="Enabled"
+                    ZoomMode="Enabled"
+                    MinZoomFactor="1"
+                    MaxZoomFactor="4"
+                    ViewChanged="PageModeZoomScrollViewer_ViewChanged"
+                    SizeChanged="ReaderScrollViewer_SizeChanged"
+                    PointerPressed="PageModeZoomScrollViewer_PointerPressed"
+                    PointerMoved="PageModeZoomScrollViewer_PointerMoved"
+                    PointerReleased="PageModeZoomScrollViewer_PointerReleased"
+                    PointerCanceled="PageModeZoomScrollViewer_PointerCanceled"
+                    PointerCaptureLost="PageModeZoomScrollViewer_PointerCaptureLost"
+                    Visibility="{x:Bind ViewModel.ShowWaterfallContent, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                    <StackPanel
+                        Padding="20,0,20,28"
+                        HorizontalAlignment="Center">
+                        <ItemsRepeater ItemsSource="{x:Bind ViewModel.Pages}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Orientation="Vertical" Spacing="8" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="models:ReaderPageImage">
+                                    <Grid
+                                        MinWidth="360"
+                                        MinHeight="480"
                                         HorizontalAlignment="Center"
-                                        ImageOpened="ReaderImage_ImageOpened"
-                                        ImageFailed="ReaderImage_ImageFailed" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsRepeater.ItemTemplate>
-                    </ItemsRepeater>
-                </StackPanel>
-            </ScrollViewer>
+                                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                        Loaded="WaterfallPageContainer_Loaded">
+                                        <Image
+                                            Source="{x:Bind Url, Converter={StaticResource StringToImageSource}}"
+                                            Stretch="Fill"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            ImageOpened="ReaderImage_ImageOpened"
+                                            ImageFailed="ReaderImage_ImageFailed" />
+                                        <StackPanel
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Spacing="10"
+                                            Padding="24"
+                                            Visibility="{x:Bind LoadFailed, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                            <FontIcon
+                                                Glyph="&#xE7BA;"
+                                                FontSize="34"
+                                                HorizontalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            <TextBlock
+                                                Text="这一页走丢了"
+                                                FontWeight="SemiBold"
+                                                HorizontalAlignment="Center" />
+                                            <TextBlock
+                                                Text="可能是资源不存在,或者网络不太给力,稍后再试试"
+                                                FontSize="12"
+                                                TextAlignment="Center"
+                                                HorizontalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <Button
+                                                HorizontalAlignment="Center"
+                                                Padding="14,6"
+                                                Click="RetryImage_Click">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon Glyph="&#xE72C;" FontSize="12" />
+                                                    <TextBlock Text="重新加载" />
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <StackPanel
+                Padding="20,18,20,0"
+                Spacing="12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top">
+
+                <ProgressRing
+                    IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                    HorizontalAlignment="Center"
+                    Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                <InfoBar
+                    IsClosable="False"
+                    Severity="Error"
+                    IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                    Title="章节加载失败"
+                    Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
+
+                <InfoBar
+                    IsClosable="False"
+                    Severity="Warning"
+                    IsOpen="{x:Bind ViewModel.UsesWebFallback, Mode=OneWay}"
+                    Title="当前为 Web 降级资源"
+                    Message="未配置客户端签名密钥时,接口可能返回混淆图片。配置 Reader:AppClientVerifySecret 和 Reader:ClientFingerprint 后可请求原始资源。" />
+
+                <InfoBar
+                    IsClosable="False"
+                    Severity="Informational"
+                    IsOpen="{x:Bind ViewModel.HasDownloadFeedback, Mode=OneWay}"
+                    Title="下载"
+                    Message="{x:Bind ViewModel.DownloadFeedbackMessage, Mode=OneWay}" />
+
+                <InfoBar
+                    IsClosable="False"
+                    Severity="Error"
+                    IsOpen="{x:Bind ViewModel.HasDownloadError, Mode=OneWay}"
+                    Title="下载失败"
+                    Message="{x:Bind ViewModel.DownloadErrorMessage, Mode=OneWay}" />
+            </StackPanel>
         </Grid>
+
+        <Border
+            x:Name="ReaderZoomGuideOverlay"
+            Grid.RowSpan="2"
+            Margin="0,64,0,0"
+            Padding="16,12"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Top"
+            CornerRadius="8"
+            BorderThickness="1"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            Background="{ThemeResource AcrylicBackgroundFillColorBaseBrush}"
+            Opacity="0"
+            Visibility="Collapsed"
+            IsHitTestVisible="False">
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="ReaderZoomGuideTranslate" Y="-10" />
+            </Border.RenderTransform>
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    Width="42"
+                    Height="42"
+                    CornerRadius="8"
+                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                    <FontIcon
+                        Glyph="&#xE8A3;"
+                        FontSize="18"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
+                </Border>
+
+                <StackPanel
+                    Grid.Column="1"
+                    Spacing="4"
+                    VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock
+                            Text="按住"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Border
+                            Padding="7,2"
+                            CornerRadius="4"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            Background="{ThemeResource ControlFillColorDefaultBrush}">
+                            <TextBlock Text="Ctrl" FontWeight="SemiBold" />
+                        </Border>
+                        <TextBlock
+                            Text="+ 鼠标滚轮缩放"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold" />
+                    </StackPanel>
+                    <TextBlock
+                        Text="翻页和瀑布流模式都可以使用"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Page>

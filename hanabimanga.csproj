@@ -7,11 +7,22 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
-    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x86'">
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x64'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">
+    <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,6 +37,7 @@
   <ItemGroup>
     <Content Include="Assets\*.png" />
     <Content Include="Assets\avatar\*.webp" />
+    <Content Include="Assets\banner\*.webp" />
     <Content Include="Assets\badge\*.png" />
     <Content Include="Assets\badge\*.webp" />
   </ItemGroup>
@@ -65,5 +77,7 @@
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
     <PublishTrimmed>False</PublishTrimmed>
     <DefaultLanguage>zh-CN</DefaultLanguage>
+    <PackageCertificateThumbprint>ABB224B3B2993DB5F69E302DC336FDD7CE6A072E</PackageCertificateThumbprint>
+    <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
   </PropertyGroup>
 </Project>

@@ -109,34 +109,57 @@ namespace hanabimanga.Pages
 
             if (string.IsNullOrWhiteSpace(value)) return;
 
-            switch (type)
+            // 数字 → 漫画详情页
+            if (long.TryParse(value, out var comicId) && comicId > 0)
             {
-                case "comic":
-                    Frame.Navigate(typeof(ComicDetailPage), value);
-                    break;
-                case "url":
-                    if (Guid.TryParse(value, out var announcementId))
-                    {
-                        // targetValue 是 announcement UUID:从 supabase 取数据并在新窗口
-                        // 用原生 UI 显示,无需打开浏览器
-                        OpenAnnouncementWindow(announcementId.ToString());
-                    }
-                    else if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-                             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
-                    {
-                        // 完整 URL 走系统浏览器(如 QQ 群邀请链接、外部网站)
-                        await Launcher.LaunchUriAsync(uri);
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            $"[home] banner url 既不是绝对地址也不是 UUID,跳过: {value}");
-                    }
-                    break;
-                default:
-                    System.Diagnostics.Debug.WriteLine($"[home] banner target type 未处理: {type}");
-                    break;
+                Frame.Navigate(typeof(ComicDetailPage), value);
+                return;
             }
+
+            // 裸 UUID → 公告窗口
+            if (Guid.TryParse(value, out var announcementId))
+            {
+                OpenAnnouncementWindow(announcementId.ToString());
+                return;
+            }
+
+            if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                // 站内公告链接(.../announcements/{uuid})→ 应用内公告窗口
+                if (TryGetAnnouncementId(uri, out var urlAnnouncementId))
+                {
+                    OpenAnnouncementWindow(urlAnnouncementId);
+                    return;
+                }
+
+                // 真实外链 → 系统浏览器
+                if (type == "url")
+                {
+                    await Launcher.LaunchUriAsync(uri);
+                    return;
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[home] banner 目标无法识别,跳过: type={type}, value={value}");
+        }
+
+        // 识别站内公告链接:路径形如 .../announcements/{uuid}
+        private static bool TryGetAnnouncementId(Uri uri, out string announcementId)
+        {
+            announcementId = "";
+            var segments = uri.Segments;
+            for (var i = 0; i < segments.Length - 1; i++)
+            {
+                if (segments[i].Trim('/').Equals("announcements", StringComparison.OrdinalIgnoreCase) &&
+                    Guid.TryParse(segments[i + 1].Trim('/'), out var id))
+                {
+                    announcementId = id.ToString();
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

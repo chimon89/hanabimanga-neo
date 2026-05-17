@@ -1,6 +1,7 @@
 using hanabimanga.Services;
 using hanabimanga.Pages;
 using hanabimanga.Models;
+using hanabimanga.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
@@ -10,6 +11,8 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -30,10 +33,16 @@ namespace hanabimanga
         private AppWindow? _appWindow;
         private ComicDetailPage? _currentDetailPage;
         private ComicReaderPage? _currentReaderPage;
+        private ComicCommentsPage? _currentCommentsPage;
+        private UserProfilePage? _currentUserProfilePage;
         private RecentReadingProgress? _recentReadingProgress;
         private bool _isContinueReadingBarDismissed;
         private bool _paneFooterCompact;
         private int _accountRefreshVersion;
+        private bool _isSettingUpNotifications;
+        private string? _activeNotificationSessionKey;
+
+        public NotificationsViewModel NotificationsViewModel { get; } = new();
 
         private enum AuthDialogMode
         {
@@ -47,11 +56,15 @@ namespace hanabimanga
         public MainWindow()
         {
             InitializeComponent();
+            NotificationList.ItemsSource = NotificationsViewModel.Items;
+            NotificationsViewModel.PropertyChanged += NotificationsViewModel_PropertyChanged;
+            NotificationsViewModel.Items.CollectionChanged += NotificationsViewModelItems_CollectionChanged;
             UseGalleryStyleWindowFrame();
             RootFrame.Navigated += RootFrame_Navigated;
             NavigationRoot.SelectedItem = HomeNavigationItem;
             RootFrame.Navigate(typeof(HomePage));
             UpdateAccountFooter();
+            UpdateNotificationVisualState();
             _ = RefreshContinueReadingBarAsync();
         }
 
@@ -65,8 +78,11 @@ namespace hanabimanga
             _appWindow = AppWindow.GetFromWindowId(windowId);
 
             _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-            _appWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
-            _appWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+            ApplyCaptionButtonColors();
+            if (Content is FrameworkElement rootElement)
+            {
+                rootElement.ActualThemeChanged += (_, _) => ApplyCaptionButtonColors();
+            }
             if (_appWindow.Presenter is OverlappedPresenter presenter)
             {
                 presenter.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: true);
@@ -77,6 +93,29 @@ namespace hanabimanga
                 var scale = dpi > 0 ? dpi / 96.0 : 1.0;
                 presenter.PreferredMinimumWidth = (int)Math.Round(1280 * scale);
                 presenter.PreferredMinimumHeight = (int)Math.Round(720 * scale);
+            }
+        }
+
+        // 标题栏标题/最大化/关闭按钮的字形色需随主题显式设置,
+        // 否则在亮色模式下与樱花粉标题栏对比度不足。
+        private void ApplyCaptionButtonColors()
+        {
+            if (_appWindow == null) return;
+
+            var titleBar = _appWindow.TitleBar;
+            titleBar.ButtonBackgroundColor = Colors.Transparent;
+            titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+
+            var isDark = Content is FrameworkElement root && root.ActualTheme == ElementTheme.Dark;
+            if (isDark)
+            {
+                titleBar.ButtonForegroundColor = Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xF7, 0xFA);
+                titleBar.ButtonInactiveForegroundColor = Windows.UI.Color.FromArgb(0xFF, 0xC9, 0x97, 0xA9);
+            }
+            else
+            {
+                titleBar.ButtonForegroundColor = Windows.UI.Color.FromArgb(0xFF, 0x2B, 0x14, 0x20);
+                titleBar.ButtonInactiveForegroundColor = Windows.UI.Color.FromArgb(0xFF, 0x80, 0x56, 0x6A);
             }
         }
 
@@ -104,7 +143,7 @@ namespace hanabimanga
             var passthroughRects = new List<RectInt32>();
 
             AddPassthroughRegion(passthroughRects, PaneToggleButton, scaleAdjustment);
-            AddPassthroughRegion(passthroughRects, TitleBarSearchBox, scaleAdjustment);
+            AddPassthroughRegion(passthroughRects, NotificationButton, scaleAdjustment);
             AddPassthroughRegion(passthroughRects, DetailTitleBarBackButton, scaleAdjustment);
             AddPassthroughRegion(passthroughRects, DetailTitleBarHomeButton, scaleAdjustment);
 
@@ -152,12 +191,34 @@ namespace hanabimanga
                 _currentReaderPage.ReadingProgressChanged -= ReaderPage_ReadingProgressChanged;
                 _currentReaderPage = null;
             }
+            if (_currentCommentsPage != null)
+            {
+                _currentCommentsPage.TitleBarInfoChanged -= CommentsPage_TitleBarInfoChanged;
+                _currentCommentsPage = null;
+            }
+            if (_currentUserProfilePage != null)
+            {
+                _currentUserProfilePage.TitleBarInfoChanged -= UserProfilePage_TitleBarInfoChanged;
+                _currentUserProfilePage = null;
+            }
 
             if (RootFrame.Content is ComicDetailPage detailPage)
             {
                 _currentDetailPage = detailPage;
                 _currentDetailPage.TitleBarInfoChanged += DetailPage_TitleBarInfoChanged;
                 ShowDetailTitleBar(detailPage);
+            }
+            else if (RootFrame.Content is ComicCommentsPage commentsPage)
+            {
+                _currentCommentsPage = commentsPage;
+                _currentCommentsPage.TitleBarInfoChanged += CommentsPage_TitleBarInfoChanged;
+                ShowCommentsTitleBar(commentsPage);
+            }
+            else if (RootFrame.Content is UserProfilePage userProfilePage)
+            {
+                _currentUserProfilePage = userProfilePage;
+                _currentUserProfilePage.TitleBarInfoChanged += UserProfilePage_TitleBarInfoChanged;
+                ShowUserProfileTitleBar(userProfilePage);
             }
             else if (RootFrame.Content is ComicReaderPage readerPage)
             {
@@ -177,6 +238,10 @@ namespace hanabimanga
                 {
                     NavigationRoot.SelectedItem = DiscoverNavigationItem;
                 }
+                else if (RootFrame.Content is CategoryPage)
+                {
+                    NavigationRoot.SelectedItem = CategoryNavigationItem;
+                }
                 else if (RootFrame.Content is BookshelfPage)
                 {
                     NavigationRoot.SelectedItem = BookshelfNavigationItem;
@@ -185,7 +250,22 @@ namespace hanabimanga
                 {
                     NavigationRoot.SelectedItem = RankingNavigationItem;
                 }
+                else if (RootFrame.Content is TaskCenterPage ||
+                    RootFrame.Content is PointsDetailPage ||
+                    RootFrame.Content is PointsStorePage ||
+                    RootFrame.Content is ExchangeHistoryPage)
+                {
+                    NavigationRoot.SelectedItem = TaskCenterNavigationItem;
+                }
+                else if (RootFrame.Content is AppSettingsPage)
+                {
+                    NavigationRoot.SelectedItem = AppSettingsNavigationItem;
+                }
                 else if (RootFrame.Content is UserSettingsPage)
+                {
+                    NavigationRoot.SelectedItem = null;
+                }
+                else if (RootFrame.Content is FeedbackListPage or FeedbackSubmitPage)
                 {
                     NavigationRoot.SelectedItem = null;
                 }
@@ -213,11 +293,23 @@ namespace hanabimanga
                 case "discover" when RootFrame.Content is not DiscoverPage:
                     RootFrame.Navigate(typeof(DiscoverPage));
                     break;
+                case "category" when RootFrame.Content is not CategoryPage:
+                    RootFrame.Navigate(typeof(CategoryPage));
+                    break;
                 case "bookshelf" when RootFrame.Content is not BookshelfPage:
                     RootFrame.Navigate(typeof(BookshelfPage));
                     break;
                 case "ranking" when RootFrame.Content is not RankingPage:
                     RootFrame.Navigate(typeof(RankingPage));
+                    break;
+                case "task-center" when RootFrame.Content is not TaskCenterPage &&
+                    RootFrame.Content is not PointsDetailPage &&
+                    RootFrame.Content is not PointsStorePage &&
+                    RootFrame.Content is not ExchangeHistoryPage:
+                    RootFrame.Navigate(typeof(TaskCenterPage));
+                    break;
+                case "app-settings" when RootFrame.Content is not AppSettingsPage:
+                    RootFrame.Navigate(typeof(AppSettingsPage));
                     break;
             }
         }
@@ -254,11 +346,26 @@ namespace hanabimanga
             }
         }
 
+        private void CommentsPage_TitleBarInfoChanged(object? sender, EventArgs e)
+        {
+            if (sender is ComicCommentsPage commentsPage)
+            {
+                ShowCommentsTitleBar(commentsPage);
+            }
+        }
+
+        private void UserProfilePage_TitleBarInfoChanged(object? sender, EventArgs e)
+        {
+            if (sender is UserProfilePage userProfilePage)
+            {
+                ShowUserProfileTitleBar(userProfilePage);
+            }
+        }
+
         private void ShowDefaultTitleBar()
         {
             TitleBarLogoImage.Visibility = Visibility.Visible;
             TitleBarAppNameTextBlock.Visibility = Visibility.Visible;
-            TitleBarSearchBox.Visibility = Visibility.Visible;
             DetailTitleBarBreadcrumb.Visibility = Visibility.Collapsed;
             AppTitleBar.UpdateLayout();
             UpdateTitleBarInteractiveRegions();
@@ -268,7 +375,6 @@ namespace hanabimanga
         {
             TitleBarLogoImage.Visibility = Visibility.Collapsed;
             TitleBarAppNameTextBlock.Visibility = Visibility.Collapsed;
-            TitleBarSearchBox.Visibility = Visibility.Collapsed;
             DetailTitleBarBreadcrumb.Visibility = Visibility.Visible;
 
             DetailTitleBarCategoryTextBlock.Text = detailPage.TitleBarCategory;
@@ -277,11 +383,34 @@ namespace hanabimanga
             UpdateTitleBarInteractiveRegions();
         }
 
+        private void ShowCommentsTitleBar(ComicCommentsPage commentsPage)
+        {
+            TitleBarLogoImage.Visibility = Visibility.Collapsed;
+            TitleBarAppNameTextBlock.Visibility = Visibility.Collapsed;
+            DetailTitleBarBreadcrumb.Visibility = Visibility.Visible;
+
+            DetailTitleBarCategoryTextBlock.Text = commentsPage.TitleBarCategory;
+            DetailTitleBarTitleTextBlock.Text = commentsPage.TitleBarTitle;
+            AppTitleBar.UpdateLayout();
+            UpdateTitleBarInteractiveRegions();
+        }
+
+        private void ShowUserProfileTitleBar(UserProfilePage userProfilePage)
+        {
+            TitleBarLogoImage.Visibility = Visibility.Collapsed;
+            TitleBarAppNameTextBlock.Visibility = Visibility.Collapsed;
+            DetailTitleBarBreadcrumb.Visibility = Visibility.Visible;
+
+            DetailTitleBarCategoryTextBlock.Text = userProfilePage.TitleBarCategory;
+            DetailTitleBarTitleTextBlock.Text = userProfilePage.TitleBarTitle;
+            AppTitleBar.UpdateLayout();
+            UpdateTitleBarInteractiveRegions();
+        }
+
         private void ShowReaderTitleBar(ComicReaderPage readerPage)
         {
             TitleBarLogoImage.Visibility = Visibility.Collapsed;
             TitleBarAppNameTextBlock.Visibility = Visibility.Collapsed;
-            TitleBarSearchBox.Visibility = Visibility.Collapsed;
             DetailTitleBarBreadcrumb.Visibility = Visibility.Visible;
 
             DetailTitleBarCategoryTextBlock.Text = readerPage.TitleBarCategory;
@@ -315,22 +444,6 @@ namespace hanabimanga
 
             RootFrame.BackStack.Clear();
             NavigationRoot.SelectedItem = HomeNavigationItem;
-        }
-
-        private void TitleBarSearchBox_QuerySubmitted(
-            AutoSuggestBox sender,
-            AutoSuggestBoxQuerySubmittedEventArgs args)
-        {
-            var query = args.QueryText?.Trim();
-            if (string.IsNullOrWhiteSpace(query)) return;
-
-            if (RootFrame.Content is SearchPage)
-            {
-                RootFrame.Navigate(typeof(SearchPage), query);
-                return;
-            }
-
-            RootFrame.Navigate(typeof(SearchPage), query);
         }
 
         private async Task RefreshContinueReadingBarAsync()
@@ -445,12 +558,60 @@ namespace hanabimanga
             NavigateUserSettings();
         }
 
+        private void ViewMyProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateCurrentUserProfile();
+        }
+
+        private void TaskCenterButton_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateTaskCenter();
+        }
+
+        private void FeedbackButton_Click(object sender, RoutedEventArgs e)
+        {
+            NavigateFeedback();
+        }
+
+        private void NavigateCurrentUserProfile()
+        {
+            AccountFlyout.Hide();
+
+            var userId = SupabaseService.Instance.CurrentUser?.Id;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                userId = ReadJwtUserClaims(SupabaseService.Instance.CurrentSession?.AccessToken).UserId;
+            }
+
+            if (string.IsNullOrWhiteSpace(userId)) return;
+
+            RootFrame.Navigate(typeof(UserProfilePage), userId);
+        }
+
         private void NavigateUserSettings()
         {
             AccountFlyout.Hide();
             if (RootFrame.Content is not UserSettingsPage)
             {
                 RootFrame.Navigate(typeof(UserSettingsPage));
+            }
+        }
+
+        private void NavigateTaskCenter()
+        {
+            AccountFlyout.Hide();
+            if (RootFrame.Content is not TaskCenterPage)
+            {
+                RootFrame.Navigate(typeof(TaskCenterPage));
+            }
+        }
+
+        private void NavigateFeedback()
+        {
+            AccountFlyout.Hide();
+            if (RootFrame.Content is not FeedbackListPage)
+            {
+                RootFrame.Navigate(typeof(FeedbackListPage));
             }
         }
 
@@ -716,6 +877,9 @@ namespace hanabimanga
 
             SignedOutAccountActionsPanel.Visibility = isSignedIn ? Visibility.Collapsed : Visibility.Visible;
             SignedInAccountActionsPanel.Visibility = isSignedIn ? Visibility.Visible : Visibility.Collapsed;
+            ViewMyProfileButton.IsEnabled = isSignedIn;
+            TaskCenterButton.IsEnabled = isSignedIn;
+            FeedbackButton.IsEnabled = isSignedIn;
             ViewAccountButton.IsEnabled = isSignedIn;
 
             if (isSignedIn)
@@ -730,6 +894,9 @@ namespace hanabimanga
                 {
                     _ = LoadAccountProfileAsync(claims.UserId, claims.Email, claims.Role, refreshVersion);
                 }
+
+                NotificationButton.Visibility = Visibility.Visible;
+                _ = SetupNotificationsAsync(accessToken!, claims.UserId);
             }
             else
             {
@@ -738,9 +905,165 @@ namespace hanabimanga
                 AccountFlyoutStatusTextBlock.Text = "登录后同步收藏和阅读进度";
                 AccountPersonPicture.DisplayName = "";
                 AccountFlyoutPersonPicture.DisplayName = "";
+
+                NotificationButton.Visibility = Visibility.Collapsed;
+                _activeNotificationSessionKey = null;
+                SupabaseService.Instance.UnsubscribeNotifications();
+                NotificationsViewModel.Clear();
             }
 
+            UpdateNotificationVisualState();
+            AppTitleBar.UpdateLayout();
+            UpdateTitleBarInteractiveRegions();
             UpdatePaneFooterLayout();
+        }
+
+        private async Task SetupNotificationsAsync(string accessToken, string? userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId)) return;
+
+            var sessionKey = $"{userId}:{accessToken}";
+            if (_activeNotificationSessionKey == sessionKey || _isSettingUpNotifications)
+            {
+                return;
+            }
+
+            _isSettingUpNotifications = true;
+            try
+            {
+                await NotificationsViewModel.LoadAsync();
+                await SupabaseService.Instance.SubscribeNotificationsAsync(OnNotificationReceived);
+                _activeNotificationSessionKey = sessionKey;
+            }
+            catch (Exception ex)
+            {
+                _activeNotificationSessionKey = null;
+                System.Diagnostics.Debug.WriteLine($"[notifications] setup failed: {ex.Message}");
+            }
+            finally
+            {
+                _isSettingUpNotifications = false;
+                UpdateNotificationVisualState();
+            }
+        }
+
+        // Realtime 回调可能在后台线程,切回 UI 线程更新通知列表。
+        private void OnNotificationReceived(NotificationItem item)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                NotificationsViewModel.AddRealtime(item);
+                UpdateNotificationVisualState();
+            });
+        }
+
+        private async void NotificationFlyout_Opened(object sender, object e)
+        {
+            await NotificationsViewModel.LoadAsync();
+            UpdateNotificationVisualState();
+        }
+
+        private async void MarkAllNotificationsRead_Click(object sender, RoutedEventArgs e)
+        {
+            await NotificationsViewModel.MarkAllReadAsync();
+            UpdateNotificationVisualState();
+        }
+
+        private async void NotificationItem_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is NotificationItem item)
+            {
+                await NotificationsViewModel.MarkReadAsync(item);
+                UpdateNotificationVisualState();
+            }
+        }
+
+        private void NotificationsViewModel_PropertyChanged(
+            object? sender,
+            PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(NotificationsViewModel.UnreadCount) or
+                nameof(NotificationsViewModel.HasUnread) or
+                nameof(NotificationsViewModel.IsLoading) or
+                nameof(NotificationsViewModel.IsEmpty) or
+                nameof(NotificationsViewModel.HasError) or
+                nameof(NotificationsViewModel.ErrorMessage))
+            {
+                UpdateNotificationVisualState();
+            }
+        }
+
+        private void NotificationsViewModelItems_CollectionChanged(
+            object? sender,
+            NotifyCollectionChangedEventArgs e)
+        {
+            UpdateNotificationVisualState();
+            UpdateNotificationListHeight();
+        }
+
+        private void NotificationItemContainer_Loaded(object sender, RoutedEventArgs e)
+            => UpdateNotificationListHeight();
+
+        // 通知列表最多显示 5 条,超过则在 ScrollViewer 内滚动。
+        // 条目高度不固定(正文 0~3 行),按已实现的前 5 条实际高度累加得出上限。
+        private void UpdateNotificationListHeight()
+        {
+            const int maxVisibleItems = 5;
+            var count = NotificationsViewModel.Items.Count;
+            if (count <= maxVisibleItems)
+            {
+                NotificationScrollViewer.MaxHeight = double.PositiveInfinity;
+                return;
+            }
+
+            double height = 0;
+            for (var i = 0; i < maxVisibleItems; i++)
+            {
+                if (NotificationList.TryGetElement(i) is not FrameworkElement element ||
+                    element.ActualHeight <= 0)
+                {
+                    return; // 前 5 条尚未实现/测量,等待容器 Loaded 后再计算
+                }
+
+                height += element.ActualHeight;
+            }
+
+            if (Math.Abs(NotificationScrollViewer.MaxHeight - height) > 0.5)
+            {
+                NotificationScrollViewer.MaxHeight = height;
+            }
+        }
+
+        private void UpdateNotificationVisualState()
+        {
+            var isSignedIn = NotificationButton.Visibility == Visibility.Visible;
+            var hasItems = NotificationsViewModel.Items.Count > 0;
+            var isLoading = NotificationsViewModel.IsLoading;
+            var hasError = NotificationsViewModel.HasError;
+
+            NotificationBadge.Value = NotificationsViewModel.UnreadCount;
+            NotificationBadge.Visibility = isSignedIn && NotificationsViewModel.HasUnread
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            NotificationLoadingRing.IsActive = isLoading;
+            NotificationLoadingRing.Visibility = isLoading
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            NotificationScrollViewer.Visibility = hasItems
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            NotificationEmptyTextBlock.Text = hasError
+                ? NotificationsViewModel.ErrorMessage ?? "通知加载失败"
+                : "暂无通知";
+            NotificationEmptyPanel.Visibility = !isLoading && (hasError || !hasItems)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            MarkAllNotificationsReadButton.IsEnabled =
+                isSignedIn && !isLoading && NotificationsViewModel.HasUnread;
         }
 
         private void UpdatePaneFooterLayout()

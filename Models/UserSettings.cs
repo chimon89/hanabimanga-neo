@@ -11,6 +11,7 @@ namespace hanabimanga.Models
         public UserProfile Profile { get; set; } = new();
         public List<UserBadgeItem> Badges { get; set; } = new();
         public List<AvatarPresetOption> AvatarPresets { get; set; } = new();
+        public List<BannerPresetOption> BannerPresets { get; set; } = new();
     }
 
     public sealed class AvatarPresetOption
@@ -18,6 +19,13 @@ namespace hanabimanga.Models
         public string FileName { get; set; } = "";
         public string Label { get; set; } = "";
         public string PreviewUrl => $"ms-appx:///Assets/avatar/{FileName}";
+    }
+
+    public sealed class BannerPresetOption
+    {
+        public string FileName { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string PreviewUrl => $"ms-appx:///Assets/banner/{FileName}";
     }
 
     public sealed class UserBadgeItem
