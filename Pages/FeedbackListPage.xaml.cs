@@ -6,6 +6,8 @@ using hanabimanga.ViewModels;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -188,10 +190,38 @@ namespace hanabimanga.Pages
 
         private async void VoteButton_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is FeedbackTicket ticket)
+            if ((sender as FrameworkElement)?.Tag is FeedbackTicket ticket)
             {
                 await ViewModel.ToggleVoteAsync(ticket);
             }
+        }
+
+        private void TicketCard_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (IsInsideButton(e.OriginalSource as DependencyObject))
+            {
+                return;
+            }
+
+            if ((sender as FrameworkElement)?.Tag is FeedbackTicket ticket)
+            {
+                Frame.Navigate(typeof(FeedbackDetailPage), ticket);
+            }
+        }
+
+        private static bool IsInsideButton(DependencyObject? source)
+        {
+            while (source != null)
+            {
+                if (source is ButtonBase)
+                {
+                    return true;
+                }
+
+                source = VisualTreeHelper.GetParent(source);
+            }
+
+            return false;
         }
     }
 }

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -16,6 +17,7 @@ using Newtonsoft.Json.Linq;
 using Supabase;
 using Supabase.Functions;
 using Supabase.Gotrue;
+using Supabase.Gotrue.Exceptions;
 using Supabase.Realtime.PostgresChanges;
 using Client = Supabase.Client;
 using static Supabase.Postgrest.Constants;
@@ -47,6 +49,17 @@ namespace hanabimanga.Services
         public Session? CurrentSession => _client?.Auth.CurrentSession;
         public User? CurrentUser => _client?.Auth.CurrentUser;
         public bool IsInitialized => _client is not null;
+        public bool IsSignedIn => !string.IsNullOrWhiteSpace(CurrentSession?.AccessToken);
+        public string? CurrentUserId => CurrentUser?.Id ?? ReadJwtSubject(CurrentSession?.AccessToken);
+
+        /// <summary>当前生效的接口地址(已去除尾部斜杠)。</summary>
+        public string? CurrentUrl => _supabaseUrl;
+
+        /// <summary>接口线路实时切换完成后触发,供 UI 刷新订阅与展示。</summary>
+        public event EventHandler? EndpointChanged;
+
+        /// <summary>登录 / 退出成功后触发,供未登录提示页主动刷新数据。</summary>
+        public event EventHandler? AuthStateChanged;
 
         private SupabaseService() { }
 
@@ -62,40 +75,7 @@ namespace hanabimanga.Services
             {
                 if (_client is not null) return;
 
-                options ??= new SupabaseOptions
-                {
-                    AutoConnectRealtime = true,
-                    AutoRefreshToken = true,
-                };
-
-                // 注入文件持久化:Client.InitializeAsync 会自动 LoadSession 还原,
-                // 之后由 AutoRefreshToken 配合 SDK 内部 TokenRefresh 定时器自动续期
-                // (access_token 1h / refresh_token 90d)。
-                options.SessionHandler = new FileSessionPersistence();
-
-                var client = new Client(url, anonKey, options);
-                await client.InitializeAsync();
-
-                // 从磁盘还原 CurrentSession。InitializeAsync 内部不会自动 LoadSession,
-                // 必须显式调一次,才能让后续 RetrieveSessionAsync 有 Session 可刷。
-                client.Auth.LoadSession();
-
-                // 启动时主动刷新:若磁盘上的 access_token 已过期,立即用 refresh_token 换新;
-                // 若 refresh_token 也失效,SDK 会把用户登出。
-                try
-                {
-                    await client.Auth.RetrieveSessionAsync();
-                    Debug.WriteLine(
-                        client.Auth.CurrentSession is { } s
-                            ? $"[supabase] session restored, user={client.Auth.CurrentUser?.Email}, expires={s.ExpiresAt():O}"
-                            : "[supabase] no valid session after retrieve");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[supabase] RetrieveSessionAsync failed: {ex.Message}");
-                }
-
-                _client = client;
+                _client = await CreateClientAsync(url, anonKey, options);
                 _supabaseUrl = url.TrimEnd('/');
                 _supabaseAnonKey = anonKey;
                 _readerClientVerifySecret = readerClientVerifySecret;
@@ -104,6 +84,132 @@ namespace hanabimanga.Services
             finally
             {
                 _initLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// 实时切换接口线路:用新 URL 重建 Supabase 客户端,会话从磁盘自动还原,
+        /// 旧客户端被安全销毁。切换完成后触发 <see cref="EndpointChanged"/>。
+        /// </summary>
+        public async Task SwitchEndpointAsync(string newUrl)
+        {
+            if (string.IsNullOrWhiteSpace(newUrl))
+            {
+                throw new ArgumentException("接口地址不能为空。", nameof(newUrl));
+            }
+
+            newUrl = newUrl.TrimEnd('/');
+
+            await _initLock.WaitAsync();
+            try
+            {
+                if (_client is null || string.IsNullOrWhiteSpace(_supabaseAnonKey))
+                {
+                    throw new InvalidOperationException("SupabaseService 尚未初始化,无法切换线路。");
+                }
+
+                if (string.Equals(_supabaseUrl, newUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                var oldClient = _client;
+                var oldChannel = _notificationChannel;
+
+                var client = await CreateClientAsync(newUrl, _supabaseAnonKey, options: null);
+
+                _client = client;
+                _supabaseUrl = newUrl;
+                _notificationChannel = null;
+                _notificationSubscriptionUserId = null;
+                _notificationSubscriptionAccessToken = null;
+
+                TearDownClient(oldClient, oldChannel);
+            }
+            finally
+            {
+                _initLock.Release();
+            }
+
+            EndpointChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static async Task<Client> CreateClientAsync(
+            string url, string anonKey, SupabaseOptions? options)
+        {
+            // AutoConnectRealtime = false:Realtime 的 WebSocket 连接是可选能力,
+            // 不能让它的失败(如 CDN 线路未代理 WSS)拖垮 Auth / REST 等核心初始化。
+            // Realtime 改为在 SubscribeNotificationsAsync 中按需连接(best-effort)。
+            options ??= new SupabaseOptions
+            {
+                AutoConnectRealtime = false,
+                AutoRefreshToken = true,
+            };
+
+            // 注入文件持久化:Client.InitializeAsync 会自动 LoadSession 还原,
+            // 之后由 AutoRefreshToken 配合 SDK 内部 TokenRefresh 定时器自动续期
+            // (access_token 1h / refresh_token 90d)。
+            options.SessionHandler = new FileSessionPersistence();
+
+            var client = new Client(url, anonKey, options);
+            await client.InitializeAsync();
+
+            // 从磁盘还原 CurrentSession。InitializeAsync 内部不会自动 LoadSession,
+            // 必须显式调一次,才能让后续 RetrieveSessionAsync 有 Session 可刷。
+            client.Auth.LoadSession();
+
+            // 主动刷新:若磁盘上的 access_token 已过期,立即用 refresh_token 换新。
+            try
+            {
+                await client.Auth.RetrieveSessionAsync();
+                Debug.WriteLine(
+                    client.Auth.CurrentSession is { } s
+                        ? $"[supabase] session restored, user={client.Auth.CurrentUser?.Email}, expires={s.ExpiresAt():O}"
+                        : "[supabase] no valid session after retrieve");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[supabase] RetrieveSessionAsync failed: {ex.Message}");
+            }
+
+            return client;
+        }
+
+        // 销毁旧客户端:取消通知订阅、断开 Realtime、停止令牌自动刷新定时器。
+        // 关键是 Auth.Shutdown()——否则新旧两个客户端会同时刷新令牌,
+        // 一方轮换 refresh_token 后另一方刷新失败,导致用户被意外登出。
+        private static void TearDownClient(
+            Client client, Supabase.Realtime.RealtimeChannel? channel)
+        {
+            if (channel is not null)
+            {
+                try
+                {
+                    channel.Unsubscribe();
+                    client.Realtime.Remove(channel);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[supabase] old channel teardown failed: {ex.Message}");
+                }
+            }
+
+            try
+            {
+                client.Realtime.Disconnect(WebSocketCloseStatus.NormalClosure, "endpoint switch");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[supabase] old realtime disconnect failed: {ex.Message}");
+            }
+
+            try
+            {
+                client.Auth.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[supabase] old auth shutdown failed: {ex.Message}");
             }
         }
 
@@ -300,28 +406,188 @@ namespace hanabimanga.Services
 
         public async Task SignInAsync(string email, string password)
         {
-            await Client.Auth.SignInWithPassword(email, password);
+            try
+            {
+                await Client.Auth.SignInWithPassword(email, password);
+            }
+            catch (Exception ex)
+            {
+                throw ToFriendlyAuthError(ex);
+            }
+
+            AuthStateChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public async Task SignUpAsync(string email, string password)
         {
-            await Client.Auth.SignUp(email, password);
+            try
+            {
+                await Client.Auth.SignUp(email, password);
+            }
+            catch (Exception ex)
+            {
+                throw ToFriendlyAuthError(ex);
+            }
         }
 
         public async Task SendMagicLinkAsync(
             string email,
-            string redirectTo = "https://hanabimanga.top/auth/callback")
+            string redirectTo = "hanabimanga://auth")
         {
-            await Client.Auth.SignInWithOtp(new SignInWithPasswordlessEmailOptions(email)
+            try
             {
-                EmailRedirectTo = redirectTo,
-                ShouldCreateUser = true,
-            });
+                await Client.Auth.SignInWithOtp(new SignInWithPasswordlessEmailOptions(email)
+                {
+                    EmailRedirectTo = redirectTo,
+                    ShouldCreateUser = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                throw ToFriendlyAuthError(ex);
+            }
+        }
+
+        /// <summary>
+        /// 处理 Magic Link 邮件回跳的 hanabimanga:// 链接,完成登录并建立会话。
+        /// 兼容两种回跳格式:
+        ///   - confirm 链接流:query 带一次性 token_hash,经 VerifyTokenHash 换取会话;
+        ///   - 隐式流:fragment 直接带 access_token / refresh_token,经 SetSession 建立会话。
+        /// 两者都会触发 SignedIn 状态变更,经注入的 SessionHandler 自动落盘持久化。
+        /// </summary>
+        public async Task CompleteMagicLinkAsync(Uri callbackUri)
+        {
+            // 参数可能在 query(?token_hash=...)或 fragment(#access_token=...),两处都收集。
+            var parameters = ParseUrlParameters(callbackUri.Query);
+            foreach (var pair in ParseUrlParameters(callbackUri.Fragment))
+            {
+                parameters.TryAdd(pair.Key, pair.Value);
+            }
+
+            if (parameters.TryGetValue("error_description", out var errorDescription)
+                && !string.IsNullOrWhiteSpace(errorDescription))
+            {
+                throw new InvalidOperationException(errorDescription);
+            }
+
+            if (parameters.ContainsKey("error"))
+            {
+                throw new InvalidOperationException("登录链接无效或已过期,请重新获取。");
+            }
+
+            parameters.TryGetValue("type", out var typeRaw);
+
+            try
+            {
+                if (parameters.TryGetValue("token_hash", out var tokenHash)
+                    && !string.IsNullOrWhiteSpace(tokenHash))
+                {
+                    await Client.Auth.VerifyTokenHash(tokenHash, ParseEmailOtpType(typeRaw));
+                }
+                else if (parameters.TryGetValue("access_token", out var accessToken)
+                         && !string.IsNullOrWhiteSpace(accessToken)
+                         && parameters.TryGetValue("refresh_token", out var refreshToken)
+                         && !string.IsNullOrWhiteSpace(refreshToken))
+                {
+                    await Client.Auth.SetSession(accessToken, refreshToken);
+                }
+                else
+                {
+                    throw new InvalidOperationException("登录链接缺少必要的令牌信息,请重新获取。");
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw ToFriendlyAuthError(ex);
+            }
+
+            AuthStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static Constants.EmailOtpType ParseEmailOtpType(string? raw) =>
+            raw?.Trim().ToLowerInvariant() switch
+            {
+                "signup" => Constants.EmailOtpType.Signup,
+                "invite" => Constants.EmailOtpType.Invite,
+                "magiclink" => Constants.EmailOtpType.MagicLink,
+                "recovery" => Constants.EmailOtpType.Recovery,
+                "email_change" => Constants.EmailOtpType.EmailChange,
+                _ => Constants.EmailOtpType.Email,
+            };
+
+        private static Dictionary<string, string> ParseUrlParameters(string? raw)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrEmpty(raw))
+            {
+                return result;
+            }
+
+            foreach (var pair in raw.TrimStart('#', '?')
+                         .Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var idx = pair.IndexOf('=');
+                if (idx <= 0)
+                {
+                    continue;
+                }
+
+                var key = Uri.UnescapeDataString(pair[..idx]);
+                var value = Uri.UnescapeDataString(pair[(idx + 1)..]);
+                result[key] = value;
+            }
+
+            return result;
         }
 
         public async Task SignOutAsync()
         {
-            await Client.Auth.SignOut(Constants.SignOutScope.Local);
+            try
+            {
+                await Client.Auth.SignOut(Constants.SignOutScope.Local);
+            }
+            catch (Exception ex)
+            {
+                throw ToFriendlyAuthError(ex);
+            }
+
+            AuthStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static InvalidOperationException ToFriendlyAuthError(Exception ex)
+        {
+            string message;
+
+            if (ex is GotrueException gotrue)
+            {
+                message = gotrue.Reason switch
+                {
+                    FailureHint.Reason.UserBadLogin => "邮箱或密码错误,请重新输入。",
+                    FailureHint.Reason.UserBadMultiple => "邮箱或密码错误,请重新输入。",
+                    FailureHint.Reason.UserBadPassword => "密码不符合要求(至少 6 位)。",
+                    FailureHint.Reason.UserBadEmailAddress => "邮箱格式不正确。",
+                    FailureHint.Reason.UserEmailNotConfirmed => "邮箱尚未验证,请先到邮箱完成确认后再登录。",
+                    FailureHint.Reason.UserAlreadyRegistered => "该邮箱已注册,请直接登录。",
+                    FailureHint.Reason.UserTooManyRequests => "操作过于频繁,请稍后再试。",
+                    FailureHint.Reason.UserMissingInformation => "请填写完整的邮箱和密码。",
+                    FailureHint.Reason.Offline => "网络连接失败,请检查网络后重试。",
+                    _ => "操作失败,请稍后重试。",
+                };
+            }
+            else if (ex is HttpRequestException || ex is TaskCanceledException)
+            {
+                message = "网络连接失败,请检查网络后重试。";
+            }
+            else
+            {
+                message = "操作失败,请稍后重试。";
+            }
+
+            return new InvalidOperationException(message, ex);
         }
 
         public async Task<Announcement?> GetAnnouncementAsync(string announcementId)
@@ -385,9 +651,14 @@ namespace hanabimanga.Services
         public async Task<TaskCenterDocument?> GetCurrentUserTaskCenterAsync()
         {
             var token = CurrentSession?.AccessToken;
-            var userId = CurrentUser?.Id;
+            var userId = CurrentUserId;
             var isSignedIn = !string.IsNullOrWhiteSpace(token) &&
                 !string.IsNullOrWhiteSpace(userId);
+
+            if (!isSignedIn)
+            {
+                throw new InvalidOperationException("请先登录后再查看任务中心。");
+            }
 
             var taskDefinitions = await TryGetTaskCenterRecordsAsync(
                 () => GetRestRecordsWithOptionalAuthAsync<RawTaskDefinitionRecord>(
@@ -397,18 +668,6 @@ namespace hanabimanga.Services
                 () => GetRestRecordsAsync<RawPointProductRecord>(
                     "products?select=id,name,description,price,image_url,duration_days,is_active,sort_order,stock_limit,sales_count,type" +
                     "&is_active=eq.true&order=sort_order.asc&limit=20"));
-
-            if (!isSignedIn)
-            {
-                return BuildTaskCenterDocument(
-                    userId: "",
-                    ledgerRows: new List<RawPointLedgerRecord>(),
-                    taskDefinitions,
-                    progressRows: new List<RawUserTaskProgressRecord>(),
-                    products,
-                    todayCommentCount: 0,
-                    todayReadProgress: 0);
-            }
 
             var escapedUserId = Uri.EscapeDataString(userId!);
             var todayStartUtc = DateTime.Now.Date.ToUniversalTime()
@@ -440,6 +699,16 @@ namespace hanabimanga.Services
                 todayChapterViews.Count,
                 todayReadingRows.Sum(row => Math.Clamp(row.PageIndex ?? 0, 0, 20)));
 
+            RawCheckinWeekPreview? checkinPreview = null;
+            try
+            {
+                checkinPreview = await GetCheckinWeekPreviewAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[task-center] checkin preview failed: {ex.Message}");
+            }
+
             return BuildTaskCenterDocument(
                 userId!,
                 ledgerRows,
@@ -447,7 +716,36 @@ namespace hanabimanga.Services
                 progressRows,
                 products,
                 todayComments.Count,
-                Math.Clamp(todayReadProgress, 0, 20));
+                Math.Clamp(todayReadProgress, 0, 20),
+                checkinPreview);
+        }
+
+        private async Task<RawCheckinWeekPreview?> GetCheckinWeekPreviewAsync()
+        {
+            var raw = await PostRpcAsync<JToken>("get_checkin_week_preview", new { }, authenticated: true);
+            var obj = (raw as JArray)?.FirstOrDefault() as JObject ?? raw as JObject;
+            return obj?.ToObject<RawCheckinWeekPreview>();
+        }
+
+        private const string CheckinTaskId = "daily_checkin";
+
+        public async Task ClaimCheckinRewardAsync()
+        {
+            GetRequiredCurrentUserId("请先登录后再签到。");
+
+            var raw = await PostRpcAsync<JToken>(
+                "claim_task_reward",
+                new { p_task_id = CheckinTaskId },
+                authenticated: true);
+
+            // claim_task_reward 返回结构未在文档中定义:若返回对象明确含 success=false 则抛错,
+            // 否则视为成功,实际结果以随后重新拉取的任务中心文档为准。
+            var result = (raw as JArray)?.FirstOrDefault() as JObject ?? raw as JObject;
+            if (result?["success"]?.Value<bool>() == false)
+            {
+                throw new InvalidOperationException(
+                    result["error"]?.ToString() ?? "签到失败,请稍后再试。");
+            }
         }
 
         public async Task<UserProfile> UpdateCurrentUserProfileAsync(string username, string displayName)
@@ -815,6 +1113,43 @@ namespace hanabimanga.Services
                 .Where(row => !string.IsNullOrWhiteSpace(row.TicketId))
                 .Select(row => row.TicketId!)
                 .ToHashSet(StringComparer.Ordinal);
+        }
+
+        public async Task<List<TicketVoter>> GetTicketVotersAsync(string ticketId)
+        {
+            if (string.IsNullOrWhiteSpace(ticketId))
+            {
+                return new List<TicketVoter>();
+            }
+
+            var rows = await GetRestRecordsWithOptionalAuthAsync<RawTicketVoteRecord>(
+                $"ticket_votes?select=user_id,created_at&ticket_id=eq.{Uri.EscapeDataString(ticketId)}" +
+                "&order=created_at.desc&limit=200");
+
+            var profiles = await GetProfilesByIdsAsync(rows
+                .Select(row => row.UserId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!)
+                .Distinct(StringComparer.Ordinal)
+                .ToList());
+
+            return rows
+                .Where(row => !string.IsNullOrWhiteSpace(row.UserId))
+                .Select(row =>
+                {
+                    profiles.TryGetValue(row.UserId!, out var profile);
+                    var name = profile?.DisplayName;
+                    if (string.IsNullOrWhiteSpace(name)) name = profile?.Username;
+                    if (string.IsNullOrWhiteSpace(name)) name = "花火用户";
+                    return new TicketVoter
+                    {
+                        UserId = row.UserId!,
+                        Name = name!,
+                        AvatarUrl = profile?.AvatarUrl,
+                        VotedAt = row.CreatedAt,
+                    };
+                })
+                .ToList();
         }
 
         public async Task AddTicketVoteAsync(string ticketId)
@@ -1300,8 +1635,8 @@ namespace hanabimanga.Services
                 "popularity_daily,popularity_weekly,popularity_monthly";
             var safeLimit = Math.Clamp(limit, 1, 100);
 
-            // slug 非空 = 已正式上架(与 count_comics_by_category 的过滤口径一致)
-            var path = $"comics?select={select}&slug=not.is.null" +
+            // slug 对前端没有影响不需要过滤 = 已正式上架(与 count_comics_by_category 的过滤口径一致)
+            var path = $"comics?select={select}" +
                 $"&order={orderColumn}.desc.nullslast&limit={safeLimit}";
 
             // 评分榜额外要求评分人数达到阈值,避免「1 个满分」霸榜
@@ -1418,6 +1753,8 @@ namespace hanabimanga.Services
 
             UnsubscribeNotifications();
 
+            // AutoConnectRealtime 已关闭,这里按需建立 WebSocket 连接。
+            await ConnectRealtimeAsync();
             Client.Realtime.SetAuth(accessToken);
 
             var channel = Client.Realtime.Channel($"notifications-{userId}");
@@ -1465,6 +1802,20 @@ namespace hanabimanga.Services
 
                 throw;
             }
+        }
+
+        // 按需连接 Realtime WebSocket(已连接则 SDK 内部忽略)。
+        // 带超时:线路异常时避免 ConnectAsync 因 SDK 自动重连而无限挂起。
+        private async Task ConnectRealtimeAsync()
+        {
+            var connectTask = Client.Realtime.ConnectAsync();
+            var finished = await Task.WhenAny(connectTask, Task.Delay(TimeSpan.FromSeconds(10)));
+            if (finished != connectTask)
+            {
+                throw new TimeoutException("Realtime 连接超时。");
+            }
+
+            await connectTask;
         }
 
         public void UnsubscribeNotifications()
@@ -1958,7 +2309,8 @@ namespace hanabimanga.Services
             List<RawUserTaskProgressRecord> progressRows,
             List<RawPointProductRecord> products,
             int todayCommentCount,
-            int todayReadProgress)
+            int todayReadProgress,
+            RawCheckinWeekPreview? checkinPreview)
         {
             var document = new TaskCenterDocument();
             var now = DateTime.Now;
@@ -1975,12 +2327,19 @@ namespace hanabimanga.Services
             document.TodayPoints = ledger
                 .Where(row => row.Amount > 0 && ToLocalDate(row.CreatedAt) == today)
                 .Sum(row => row.Amount);
-            document.HasSignedInToday = ledger.Any(row =>
-                row.Amount > 0 &&
-                ToLocalDate(row.CreatedAt) == today &&
-                IsSignInReason(row.Reason));
-            document.SignInStreak = CalculateSignInStreak(ledger, today);
-            document.SignInDays = BuildSignInDays(ledger, today);
+            if (checkinPreview?.Days is { Count: > 0 })
+            {
+                ApplyCheckinPreview(document, checkinPreview);
+            }
+            else
+            {
+                document.HasSignedInToday = ledger.Any(row =>
+                    row.Amount > 0 &&
+                    ToLocalDate(row.CreatedAt) == today &&
+                    IsSignInReason(row.Reason));
+                document.SignInStreak = CalculateSignInStreak(ledger, today);
+                document.SignInDays = BuildSignInDays(ledger, today);
+            }
             document.Transactions = ledger
                 .Select(row => new PointTransaction
                 {
@@ -2032,7 +2391,7 @@ namespace hanabimanga.Services
         {
             var periodKey = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var progressByTask = progressRows
-                .GroupBy(row => row.TaskId)
+                .GroupBy(row => row.TaskId ?? "")
                 .ToDictionary(group => group.Key, group => group.ToList());
             var items = new List<(string Category, TaskCenterTaskItem Item)>();
 
@@ -2042,7 +2401,13 @@ namespace hanabimanga.Services
                     ? $"任务 {definition.Id}"
                     : definition.Title!;
                 var template = ResolveTaskTemplate(title, definition.TaskType, definition.Category);
-                var hasProgress = progressByTask.TryGetValue(definition.Id, out var progress) &&
+                // 签到任务有专属的「每日签到」区块,不并入任务列表,避免重复展示。
+                if (template.Kind == "signin")
+                {
+                    continue;
+                }
+
+                var hasProgress = progressByTask.TryGetValue(definition.Id ?? "", out var progress) &&
                     progress.Any(row =>
                         string.IsNullOrWhiteSpace(row.PeriodKey) ||
                         string.Equals(row.PeriodKey, periodKey, StringComparison.OrdinalIgnoreCase) ||
@@ -2056,7 +2421,7 @@ namespace hanabimanga.Services
 
                 items.Add((template.Category, new TaskCenterTaskItem
                 {
-                    Id = definition.Id.ToString(CultureInfo.InvariantCulture),
+                    Id = definition.Id ?? "",
                     Title = title,
                     Description = string.IsNullOrWhiteSpace(definition.Description)
                         ? template.Description
@@ -2103,7 +2468,7 @@ namespace hanabimanga.Services
 
         private static List<TaskCenterTaskItem> BuildDefaultOneTimeTasks(List<RawUserTaskProgressRecord> progressRows)
         {
-            var isDone = progressRows.Any(row => row.TaskId == 1);
+            var isDone = progressRows.Any(row => row.TaskId == "verify_email");
             return
             [
                 new TaskCenterTaskItem
@@ -2123,7 +2488,7 @@ namespace hanabimanga.Services
 
         private static List<TaskCenterTaskItem> BuildDefaultLongTermTasks(List<RawUserTaskProgressRecord> progressRows)
         {
-            var isDone = progressRows.Any(row => row.TaskId == 2);
+            var isDone = progressRows.Any(row => row.TaskId == "invite_friend");
             return
             [
                 new TaskCenterTaskItem
@@ -2321,6 +2686,62 @@ namespace hanabimanga.Services
             var fromDays = durationDays * 220;
             var fromPrice = (int)Math.Round(price * 1000m, MidpointRounding.AwayFromZero);
             return Math.Max(fromDays, fromPrice);
+        }
+
+        private static void ApplyCheckinPreview(TaskCenterDocument document, RawCheckinWeekPreview preview)
+        {
+            var culture = new CultureInfo("zh-CN");
+            var weekdayLabels = new[] { "周一", "周二", "周三", "周四", "周五", "周六", "周日" };
+            var days = new List<TaskCenterSignInDay>();
+            RawCheckinDay? todayDay = null;
+
+            foreach (var day in preview.Days!)
+            {
+                var isToday = !string.IsNullOrWhiteSpace(day.Date) &&
+                    string.Equals(day.Date, preview.Today, StringComparison.Ordinal);
+                if (isToday)
+                {
+                    todayDay = day;
+                }
+
+                string label;
+                if (DateTime.TryParse(day.Date, CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var parsedDate))
+                {
+                    label = culture.DateTimeFormat.GetAbbreviatedDayName(parsedDate.DayOfWeek);
+                }
+                else
+                {
+                    label = day.DayOfWeek is >= 1 and <= 7 ? weekdayLabels[day.DayOfWeek - 1] : "";
+                }
+
+                days.Add(new TaskCenterSignInDay
+                {
+                    Label = label,
+                    Points = day.Points,
+                    IsChecked = IsCheckedState(day.State),
+                    IsToday = isToday,
+                });
+            }
+
+            document.SignInDays = days;
+            document.HasSignedInToday = todayDay != null && IsCheckedState(todayDay.State);
+            // RPC 的 streak 是「当天签到后」会达到的连续天数:今天已签即为当前连续天数,
+            // 今天未签则当前连续天数为该值减 1。
+            document.SignInStreak = todayDay == null
+                ? 0
+                : Math.Max(0, document.HasSignedInToday ? todayDay.Streak : todayDay.Streak - 1);
+        }
+
+        private static bool IsCheckedState(string? state)
+        {
+            if (string.IsNullOrWhiteSpace(state)) return false;
+            // get_checkin_week_preview 用 *_claimed 表示该日已签到(如 today_claimed / past_claimed)。
+            var normalized = state.ToLowerInvariant();
+            return normalized.Contains("claimed", StringComparison.Ordinal) ||
+                normalized.Contains("checked", StringComparison.Ordinal) ||
+                normalized.Contains("signed", StringComparison.Ordinal) ||
+                normalized.Contains("done", StringComparison.Ordinal);
         }
 
         private static List<TaskCenterSignInDay> BuildSignInDays(
@@ -2679,13 +3100,36 @@ namespace hanabimanga.Services
 
         private string GetRequiredCurrentUserId(string message)
         {
-            if (string.IsNullOrWhiteSpace(CurrentSession?.AccessToken) ||
-                string.IsNullOrWhiteSpace(CurrentUser?.Id))
+            var token = CurrentSession?.AccessToken;
+            var userId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(token) ||
+                string.IsNullOrWhiteSpace(userId))
             {
                 throw new InvalidOperationException(message);
             }
 
-            return CurrentUser!.Id!;
+            return userId!;
+        }
+
+        private static string? ReadJwtSubject(string? accessToken)
+        {
+            if (string.IsNullOrWhiteSpace(accessToken)) return null;
+
+            try
+            {
+                var parts = accessToken.Split('.');
+                if (parts.Length < 2) return null;
+
+                var payload = parts[1].Replace('-', '+').Replace('_', '/');
+                payload = payload.PadRight(payload.Length + ((4 - payload.Length % 4) % 4), '=');
+
+                var json = JObject.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
+                return json.Value<string>("sub");
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private ComicComment MapComment(RawCommentRecord record, RawProfileSummaryRecord? profile)

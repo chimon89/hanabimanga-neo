@@ -72,14 +72,8 @@
                     Padding="28,22"
                     CornerRadius="16"
                     BorderThickness="1"
-                    BorderBrush="#40FFFFFF">
-                    <Border.Background>
-                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                            <GradientStop Color="#FFF378A2" Offset="0" />
-                            <GradientStop Color="#FFFF9EBB" Offset="0.55" />
-                            <GradientStop Color="#FFF7B2C6" Offset="1" />
-                        </LinearGradientBrush>
-                    </Border.Background>
+                    BorderBrush="#40FFFFFF"
+                    Background="{ThemeResource PointsPanelBackgroundBrush}">
                     <Grid ColumnSpacing="18" RowSpacing="18">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -93,16 +87,19 @@
 
                         <StackPanel Grid.Row="0" Grid.Column="0" Spacing="6">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE734;" Foreground="White" FontSize="15" />
+                                <FontIcon
+                                    Glyph="&#xE734;"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                    FontSize="15" />
                                 <TextBlock
                                     Text="我的积分"
-                                    Foreground="White"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                     FontWeight="SemiBold" />
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Spacing="14" VerticalAlignment="Bottom">
                                 <TextBlock
                                     Text="{x:Bind ViewModel.Points, Mode=OneWay}"
-                                    Foreground="White"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                     FontSize="48"
                                     FontWeight="SemiBold" />
                                 <Border
@@ -112,7 +109,7 @@
                                     VerticalAlignment="Center">
                                     <TextBlock
                                         Text="{x:Bind ViewModel.TodayPointsText, Mode=OneWay}"
-                                        Foreground="White"
+                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                         FontWeight="SemiBold" />
                                 </Border>
                             </StackPanel>
@@ -126,8 +123,13 @@
                             Style="{ThemeResource AccentButtonStyle}"
                             Click="PointStoreButton_Click">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE719;" FontSize="15" />
-                                <TextBlock Text="积分商城" />
+                                <FontIcon
+                                    Glyph="&#xE719;"
+                                    FontSize="15"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                <TextBlock
+                                    Text="积分商城"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                             </StackPanel>
                         </Button>
                         <Button
@@ -191,16 +193,17 @@
                                                 Width="52"
                                                 Height="52"
                                                 CornerRadius="10"
-                                                Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                                Background="{ThemeResource AccentFillColorDefaultBrush}">
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="1">
                                                     <FontIcon
                                                         Glyph="{x:Bind StatusGlyph}"
                                                         FontSize="13"
-                                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                                     <TextBlock
                                                         Text="{x:Bind PointsText}"
                                                         FontSize="12"
                                                         FontWeight="SemiBold"
+                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                                         HorizontalAlignment="Center" />
                                                 </StackPanel>
                                             </Border>
@@ -214,8 +217,11 @@
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Center"
                                 MinHeight="48"
+                                Style="{ThemeResource AccentButtonStyle}"
                                 Click="SignInButton_Click">
-                                <TextBlock Text="{x:Bind ViewModel.SignInButtonText, Mode=OneWay}" />
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.SignInButtonText, Mode=OneWay}"
+                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                             </Button>
                         </Grid>
                     </Border>
@@ -252,11 +258,11 @@
                                             Width="48"
                                             Height="48"
                                             CornerRadius="10"
-                                            Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}">
                                             <FontIcon
                                                 Glyph="{x:Bind IconGlyph}"
                                                 FontSize="24"
-                                                Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center" />
                                         </Border>
@@ -323,10 +329,11 @@
                                             Width="48"
                                             Height="48"
                                             CornerRadius="10"
-                                            Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}">
                                             <FontIcon
                                                 Glyph="{x:Bind IconGlyph}"
                                                 FontSize="23"
+                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center" />
                                         </Border>
@@ -376,11 +383,11 @@
                                             Width="48"
                                             Height="48"
                                             CornerRadius="10"
-                                            Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}">
                                             <FontIcon
                                                 Glyph="{x:Bind IconGlyph}"
                                                 FontSize="23"
-                                                Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center" />
                                         </Border>

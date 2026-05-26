@@ -19,6 +19,7 @@ namespace hanabimanga.ViewModels
         private string? _feedbackMessage;
 
         public ObservableCollection<DownloadTaskItem> Downloads { get; } = new();
+        public ObservableCollection<ThemeColorOption> AccentColorOptions { get; } = new();
 
         public bool IsLoaded
         {
@@ -91,6 +92,25 @@ namespace hanabimanga.ViewModels
         public double PreloadPageCountValue => _settings.PreloadPageCount;
         public string PreloadPageCountText => $"{_settings.PreloadPageCount} 页";
         public int ReaderViewModeSelectedIndex => _settings.ReaderViewMode == "waterfall" ? 1 : 0;
+
+        public int ApiEndpointSelectedIndex => _settings.ApiEndpoint switch
+        {
+            "direct" => 1,
+            "accelerated" => 2,
+            _ => 0,
+        };
+
+        public string ActiveEndpointText
+        {
+            get
+            {
+                var url = SupabaseService.Instance.CurrentUrl;
+                if (string.IsNullOrWhiteSpace(url)) return "未连接";
+                if (url == App.AcceleratedUrl) return "当前线路:国内加速 (moedot.net)";
+                if (url == App.DirectUrl) return "当前线路:国际线路 (supabase.co)";
+                return $"当前线路:{url}";
+            }
+        }
 
         public string CacheSummary => $"{_stats.CacheSizeText} · {_stats.CachedFiles} 个文件";
         public string DownloadSummary => $"{_stats.DownloadSizeText} · {_stats.DownloadedChapters} 话";
@@ -182,6 +202,52 @@ namespace hanabimanga.ViewModels
             RaiseSettingsChanged();
         }
 
+        public async Task SetApiEndpointAsync(int selectedIndex)
+        {
+            var endpoint = selectedIndex switch
+            {
+                1 => "direct",
+                2 => "accelerated",
+                _ => "auto",
+            };
+            if (_settings.ApiEndpoint == endpoint) return;
+
+            _settings.ApiEndpoint = endpoint;
+
+            IsWorking = true;
+            ErrorMessage = null;
+            try
+            {
+                await ReaderStorageService.Instance.SaveSettingsAsync(_settings);
+
+                var url = await App.ResolveUrlForEndpointAsync(endpoint);
+                await SupabaseService.Instance.SwitchEndpointAsync(url);
+
+                FeedbackMessage = "线路已切换并立即生效";
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"线路切换失败:{ex.Message}";
+            }
+            finally
+            {
+                IsWorking = false;
+            }
+
+            RaiseSettingsChanged();
+        }
+
+        public async Task SetAccentColorAsync(string id)
+        {
+            var resolved = ThemeColorService.Instance.Resolve(id).Id;
+            if (_settings.AccentColor == resolved) return;
+
+            _settings.AccentColor = resolved;
+            ThemeColorService.Instance.Apply(resolved);
+            RefreshAccentColorOptions();
+            await SaveSettingsAsync("外观配色已更新");
+        }
+
         public async Task ClearCacheAsync()
         {
             IsWorking = true;
@@ -248,9 +314,27 @@ namespace hanabimanga.ViewModels
         private async Task ReloadCoreAsync()
         {
             _settings = await ReaderStorageService.Instance.LoadSettingsAsync();
+            RefreshAccentColorOptions();
             await ReloadStatsAsync();
             await ReloadDownloadsAsync();
             RaiseSettingsChanged();
+        }
+
+        private void RefreshAccentColorOptions()
+        {
+            if (AccentColorOptions.Count == 0)
+            {
+                foreach (var option in ThemeColorService.Instance.Options)
+                {
+                    AccentColorOptions.Add(option);
+                }
+            }
+
+            var selectedId = ThemeColorService.Instance.Resolve(_settings.AccentColor).Id;
+            foreach (var option in AccentColorOptions)
+            {
+                option.IsSelected = option.Id == selectedId;
+            }
         }
 
         private async Task ReloadStatsAsync()
@@ -280,6 +364,8 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(PreloadPageCountValue));
             OnPropertyChanged(nameof(PreloadPageCountText));
             OnPropertyChanged(nameof(ReaderViewModeSelectedIndex));
+            OnPropertyChanged(nameof(ApiEndpointSelectedIndex));
+            OnPropertyChanged(nameof(ActiveEndpointText));
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

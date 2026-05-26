@@ -41,6 +41,7 @@ namespace hanabimanga
         private int _accountRefreshVersion;
         private bool _isSettingUpNotifications;
         private string? _activeNotificationSessionKey;
+        private ContentDialog? _activeAuthDialog;
 
         public NotificationsViewModel NotificationsViewModel { get; } = new();
 
@@ -52,6 +53,16 @@ namespace hanabimanga
 
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindow(IntPtr hwnd, int nCmdShow);
+
+        private const int SW_RESTORE = 9;
 
         public MainWindow()
         {
@@ -65,7 +76,27 @@ namespace hanabimanga
             RootFrame.Navigate(typeof(HomePage));
             UpdateAccountFooter();
             UpdateNotificationVisualState();
-            _ = RefreshContinueReadingBarAsync();
+            SupabaseService.Instance.EndpointChanged += SupabaseService_EndpointChanged;
+            _ = RefreshAccountStateAfterSupabaseInitializationAsync();
+        }
+
+        // 接口线路实时切换后,客户端已重建:重置通知会话标识以强制重新订阅,
+        // 并刷新账户区与继续阅读栏。事件可能来自后台线程,切回 UI 线程处理。
+        private void SupabaseService_EndpointChanged(object? sender, EventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _activeNotificationSessionKey = null;
+                UpdateAccountFooter();
+                _ = RefreshContinueReadingBarAsync();
+            });
+        }
+
+        private async Task RefreshAccountStateAfterSupabaseInitializationAsync()
+        {
+            await App.SupabaseInitialization;
+            UpdateAccountFooter();
+            await RefreshContinueReadingBarAsync();
         }
 
         private void UseGalleryStyleWindowFrame()
@@ -265,7 +296,7 @@ namespace hanabimanga
                 {
                     NavigationRoot.SelectedItem = null;
                 }
-                else if (RootFrame.Content is FeedbackListPage or FeedbackSubmitPage)
+                else if (RootFrame.Content is FeedbackListPage or FeedbackSubmitPage or FeedbackDetailPage)
                 {
                     NavigationRoot.SelectedItem = null;
                 }
@@ -302,6 +333,10 @@ namespace hanabimanga
                 case "ranking" when RootFrame.Content is not RankingPage:
                     RootFrame.Navigate(typeof(RankingPage));
                     break;
+                case "task-center" when !CanUseTaskCenter():
+                    ShowAccountFlyout();
+                    NavigationRoot.SelectedItem = null;
+                    break;
                 case "task-center" when RootFrame.Content is not TaskCenterPage &&
                     RootFrame.Content is not PointsDetailPage &&
                     RootFrame.Content is not PointsStorePage &&
@@ -323,6 +358,21 @@ namespace hanabimanga
         public void RefreshAccountDisplay()
         {
             UpdateAccountFooter();
+        }
+
+        private static async Task<bool> EnsureSupabaseInitializedAsync()
+        {
+            await App.SupabaseInitialization;
+            return SupabaseService.Instance.IsInitialized;
+        }
+
+        // 在「尚未初始化」提示后追加真实失败原因,便于排查打包/环境问题。
+        private static string AppendSupabaseError(string baseMessage)
+        {
+            var error = App.SupabaseInitializationError;
+            return string.IsNullOrWhiteSpace(error)
+                ? baseMessage
+                : $"{baseMessage}\n\n失败原因:{error}";
         }
 
         private void ReaderPage_TitleBarInfoChanged(object? sender, EventArgs e)
@@ -448,6 +498,8 @@ namespace hanabimanga
 
         private async Task RefreshContinueReadingBarAsync()
         {
+            await App.SupabaseInitialization;
+
             if (_isContinueReadingBarDismissed ||
                 RootFrame.Content is ComicReaderPage ||
                 !SupabaseService.Instance.IsInitialized ||
@@ -600,6 +652,12 @@ namespace hanabimanga
         private void NavigateTaskCenter()
         {
             AccountFlyout.Hide();
+            if (!CanUseTaskCenter())
+            {
+                ShowAccountFlyout();
+                return;
+            }
+
             if (RootFrame.Content is not TaskCenterPage)
             {
                 RootFrame.Navigate(typeof(TaskCenterPage));
@@ -619,9 +677,11 @@ namespace hanabimanga
         {
             AccountFlyout.Hide();
 
-            if (!SupabaseService.Instance.IsInitialized)
+            if (!await EnsureSupabaseInitializedAsync())
             {
-                await ShowMessageDialogAsync("认证不可用", "Supabase 尚未初始化,请检查本地配置。");
+                await ShowMessageDialogAsync(
+                    "认证不可用",
+                    AppendSupabaseError("Supabase 尚未初始化,请检查本地配置。"));
                 return;
             }
 
@@ -646,9 +706,11 @@ namespace hanabimanga
 
         private async Task ShowAuthDialogAsync(AuthDialogMode mode)
         {
-            if (!SupabaseService.Instance.IsInitialized)
+            if (!await EnsureSupabaseInitializedAsync())
             {
-                await ShowMessageDialogAsync("认证不可用", "Supabase 尚未初始化,请检查 appsettings.local.json 或环境变量。");
+                await ShowMessageDialogAsync(
+                    "认证不可用",
+                    AppendSupabaseError("Supabase 尚未初始化,请检查 appsettings.local.json 或环境变量。"));
                 return;
             }
 
@@ -685,7 +747,7 @@ namespace hanabimanga
                     Text = "注册后需要通过邮箱确认账号。",
                     FontSize = 12,
                     TextWrapping = TextWrapping.Wrap,
-                    Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                    Foreground = ThemedBrush("TextFillColorSecondaryBrush"),
                 });
             }
             else
@@ -729,6 +791,7 @@ namespace hanabimanga
             var dialog = new ContentDialog
             {
                 XamlRoot = (Content as FrameworkElement)?.XamlRoot,
+                RequestedTheme = (Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default,
                 Title = mode == AuthDialogMode.SignIn ? "登录花火漫画" : "注册花火漫画",
                 PrimaryButtonText = mode == AuthDialogMode.SignIn ? "登录" : "注册",
                 SecondaryButtonText = mode == AuthDialogMode.SignIn ? "去注册" : "去登录",
@@ -736,6 +799,7 @@ namespace hanabimanga
                 DefaultButton = ContentDialogButton.Primary,
                 Content = contentPanel,
             };
+            SyncDialogThemeOnOpen(dialog);
 
             dialog.PrimaryButtonClick += async (_, args) =>
             {
@@ -794,9 +858,11 @@ namespace hanabimanga
 
         private async Task ShowMagicLinkDialogAsync()
         {
-            if (!SupabaseService.Instance.IsInitialized)
+            if (!await EnsureSupabaseInitializedAsync())
             {
-                await ShowMessageDialogAsync("认证不可用", "Supabase 尚未初始化,请检查 appsettings.local.json 或环境变量。");
+                await ShowMessageDialogAsync(
+                    "认证不可用",
+                    AppendSupabaseError("Supabase 尚未初始化,请检查 appsettings.local.json 或环境变量。"));
                 return;
             }
 
@@ -830,12 +896,14 @@ namespace hanabimanga
             var dialog = new ContentDialog
             {
                 XamlRoot = (Content as FrameworkElement)?.XamlRoot,
+                RequestedTheme = (Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default,
                 Title = "Magic Link 登录",
                 PrimaryButtonText = "发送邮件",
                 CloseButtonText = "取消",
                 DefaultButton = ContentDialogButton.Primary,
                 Content = contentPanel,
             };
+            SyncDialogThemeOnOpen(dialog);
 
             dialog.PrimaryButtonClick += async (_, args) =>
             {
@@ -866,21 +934,74 @@ namespace hanabimanga
                 }
             };
 
-            await dialog.ShowAsync();
+            _activeAuthDialog = dialog;
+            try
+            {
+                await dialog.ShowAsync();
+            }
+            finally
+            {
+                if (ReferenceEquals(_activeAuthDialog, dialog))
+                {
+                    _activeAuthDialog = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 处理 Magic Link 邮件回跳(hanabimanga://auth/callback):完成登录并刷新账户区。
+        /// 由 App 的协议激活路由在 UI 线程上调用。
+        /// </summary>
+        public async Task HandleMagicLinkCallbackAsync(Uri uri)
+        {
+            BringToForeground();
+
+            // 回跳时「发送邮件」对话框可能仍开着;同一时刻只能存在一个 ContentDialog,
+            // 先关掉它再弹结果提示,否则 ShowAsync 会抛 COMException。
+            _activeAuthDialog?.Hide();
+
+            if (!await EnsureSupabaseInitializedAsync())
+            {
+                await ShowMessageDialogAsync(
+                    "认证不可用",
+                    AppendSupabaseError("Supabase 尚未初始化,无法完成 Magic Link 登录。"));
+                return;
+            }
+
+            try
+            {
+                await SupabaseService.Instance.CompleteMagicLinkAsync(uri);
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageDialogAsync("登录失败", ex.Message);
+                return;
+            }
+
+            UpdateAccountFooter();
+            await ShowMessageDialogAsync("登录成功", "已通过邮件链接完成登录。");
+        }
+
+        // 从邮件回跳激活时,把窗口从最小化/后台恢复到前台。
+        private void BringToForeground()
+        {
+            var hwnd = WindowNative.GetWindowHandle(this);
+            ShowWindow(hwnd, SW_RESTORE);
+            SetForegroundWindow(hwnd);
         }
 
         private void UpdateAccountFooter()
         {
             var refreshVersion = ++_accountRefreshVersion;
-            var accessToken = SupabaseService.Instance.CurrentSession?.AccessToken;
+            var accessToken = SupabaseService.Instance.IsInitialized
+                ? SupabaseService.Instance.CurrentSession?.AccessToken
+                : null;
             var isSignedIn = !string.IsNullOrWhiteSpace(accessToken);
+
+            TaskCenterNavigationItem.IsEnabled = isSignedIn;
 
             SignedOutAccountActionsPanel.Visibility = isSignedIn ? Visibility.Collapsed : Visibility.Visible;
             SignedInAccountActionsPanel.Visibility = isSignedIn ? Visibility.Visible : Visibility.Collapsed;
-            ViewMyProfileButton.IsEnabled = isSignedIn;
-            TaskCenterButton.IsEnabled = isSignedIn;
-            FeedbackButton.IsEnabled = isSignedIn;
-            ViewAccountButton.IsEnabled = isSignedIn;
 
             if (isSignedIn)
             {
@@ -910,6 +1031,13 @@ namespace hanabimanga
                 _activeNotificationSessionKey = null;
                 SupabaseService.Instance.UnsubscribeNotifications();
                 NotificationsViewModel.Clear();
+
+                if (IsTaskCenterContent(RootFrame.Content))
+                {
+                    RootFrame.Navigate(typeof(HomePage));
+                    RootFrame.BackStack.Clear();
+                    NavigationRoot.SelectedItem = HomeNavigationItem;
+                }
             }
 
             UpdateNotificationVisualState();
@@ -917,6 +1045,12 @@ namespace hanabimanga
             UpdateTitleBarInteractiveRegions();
             UpdatePaneFooterLayout();
         }
+
+        private static bool CanUseTaskCenter()
+            => SupabaseService.Instance.IsInitialized && SupabaseService.Instance.IsSignedIn;
+
+        private static bool IsTaskCenterContent(object? content)
+            => content is TaskCenterPage or PointsDetailPage or PointsStorePage or ExchangeHistoryPage;
 
         private async Task SetupNotificationsAsync(string accessToken, string? userId)
         {
@@ -1120,6 +1254,7 @@ namespace hanabimanga
             var dialog = new ContentDialog
             {
                 XamlRoot = (Content as FrameworkElement)?.XamlRoot,
+                RequestedTheme = (Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default,
                 Title = title,
                 Content = new TextBlock
                 {
@@ -1129,8 +1264,42 @@ namespace hanabimanga
                 CloseButtonText = "知道了",
                 DefaultButton = ContentDialogButton.Close,
             };
+            SyncDialogThemeOnOpen(dialog);
 
             await dialog.ShowAsync();
+        }
+
+        // ContentDialog 经 XamlRoot 弹出时,命令栏等模板部件不随 dialog.RequestedTheme,
+        // 会停留在应用启动时的主题,导致上半内容区与下半按钮区主题割裂。
+        // 打开后对模板根(LayoutRoot)整体再赋一次当前主题,强制所有已实例化部件重解析。
+        private void SyncDialogThemeOnOpen(ContentDialog dialog)
+        {
+            dialog.Opened += (sender, _) =>
+            {
+                var theme = (Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default;
+                if (VisualTreeHelper.GetChildrenCount(sender) > 0
+                    && VisualTreeHelper.GetChild(sender, 0) is FrameworkElement templateRoot)
+                {
+                    templateRoot.RequestedTheme = theme;
+                }
+            };
+        }
+
+        // 按窗口当前实际主题从对应 ThemeDictionary 取画刷;
+        // 不能用 Application.Current.Resources[key],它只返回应用启动时主题的画刷。
+        private Brush ThemedBrush(string key)
+        {
+            var isDark = (Content as FrameworkElement)?.ActualTheme == ElementTheme.Dark;
+            var dictKey = isDark ? "Dark" : "Light";
+            var themeDictionaries = Application.Current.Resources.ThemeDictionaries;
+            if (themeDictionaries.TryGetValue(dictKey, out var raw)
+                && raw is ResourceDictionary dictionary
+                && dictionary.TryGetValue(key, out var value)
+                && value is Brush brush)
+            {
+                return brush;
+            }
+            return (Brush)Application.Current.Resources[key];
         }
 
         private static bool TryValidateAuthInput(

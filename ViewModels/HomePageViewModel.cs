@@ -79,14 +79,17 @@ namespace hanabimanga.ViewModels
         {
             if (IsLoading) return;
 
+            IsLoading = true;
+            ErrorMessage = null;
+            await App.SupabaseInitialization;
+
             if (!SupabaseService.Instance.IsInitialized)
             {
+                IsLoading = false;
                 ErrorMessage = "Supabase 未初始化:请检查 appsettings.local.json 中的 Url / AnonKey。";
                 return;
             }
 
-            IsLoading = true;
-            ErrorMessage = null;
             try
             {
                 var resp = await SupabaseService.Instance.GetHomeFeedAsync();

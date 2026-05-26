@@ -12,6 +12,16 @@ namespace hanabimanga.Models
         public int PreloadPageCount { get; set; } = 3;
         public string ReaderViewMode { get; set; } = "page";
         public bool HasSeenReaderZoomGuide { get; set; }
+
+        /// <summary>
+        /// 接口线路偏好:"auto"(自动检测)、"direct"(国际线路)、"accelerated"(国内加速)。
+        /// </summary>
+        public string ApiEndpoint { get; set; } = "auto";
+
+        /// <summary>
+        /// 外观配色 id,取值见 ThemeColorService.Options。
+        /// </summary>
+        public string AccentColor { get; set; } = "sakura";
     }
 
     public sealed class LocalStorageStats

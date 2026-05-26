@@ -127,6 +127,32 @@
                     </StackPanel>
                 </Border>
 
+                <!-- 标题与描述 -->
+                <Border
+                    Padding="16"
+                    CornerRadius="10"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="12">
+                        <TextBox
+                            x:Name="TitleTextBox"
+                            Header="工单标题（必填）"
+                            MaxLength="80"
+                            PlaceholderText="一句话描述你的反馈"
+                            TextChanged="TitleTextBox_TextChanged" />
+                        <TextBox
+                            x:Name="DescriptionTextBox"
+                            Header="详细描述（可选）"
+                            AcceptsReturn="True"
+                            MaxLength="1000"
+                            MinHeight="108"
+                            TextWrapping="Wrap"
+                            PlaceholderText="补充更多细节有助于更快受理"
+                            TextChanged="DescriptionTextBox_TextChanged" />
+                    </StackPanel>
+                </Border>
+
                 <!-- 求书:Bangumi 搜索 -->
                 <Border
                     Padding="16"
@@ -137,39 +163,6 @@
                     Visibility="{x:Bind ViewModel.IsBookRequest, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel Spacing="12">
                         <TextBlock Text="搜索书籍" FontSize="16" FontWeight="SemiBold" />
-                        <TextBlock
-                            Text="从 Bangumi 搜索并选择你想要的书籍,我们会根据条目信息进行匹配。"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextWrapping="Wrap" />
-
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox
-                                x:Name="BangumiSearchBox"
-                                PlaceholderText="输入书名搜索 Bangumi…"
-                                KeyDown="BangumiSearchBox_KeyDown" />
-                            <Button
-                                Grid.Column="1"
-                                Style="{ThemeResource AccentButtonStyle}"
-                                Click="BangumiSearchButton_Click"
-                                Content="搜索" />
-                        </Grid>
-
-                        <ProgressRing
-                            HorizontalAlignment="Left"
-                            IsActive="{x:Bind ViewModel.IsSearchingBangumi, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.IsSearchingBangumi, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-
-                        <TextBlock
-                            Text="{x:Bind ViewModel.BangumiHint, Mode=OneWay}"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.HasBangumiHint, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
 
                         <!-- 已选条目 -->
                         <Border
@@ -207,25 +200,69 @@
                                 </StackPanel>
                                 <Button
                                     Grid.Column="2"
+                                    Width="34"
+                                    Height="34"
+                                    Padding="0"
                                     VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
                                     Click="ClearBangumiButton_Click"
-                                    Content="更换" />
+                                    ToolTipService.ToolTip="取消选择">
+                                    <FontIcon Glyph="&#xE711;" FontSize="14" />
+                                </Button>
                             </Grid>
                         </Border>
 
-                        <ItemsRepeater
-                            ItemsSource="{x:Bind ViewModel.BangumiResults, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.ShowBangumiResults, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-                            <ItemsRepeater.Layout>
-                                <StackLayout Orientation="Vertical" Spacing="8" />
-                            </ItemsRepeater.Layout>
-                            <ItemsRepeater.ItemTemplate>
+                        <!-- 搜索区:选定条目后整体隐藏 -->
+                        <StackPanel
+                            Spacing="12"
+                            Visibility="{x:Bind ViewModel.ShowBangumiSearch, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock
+                                Text="从 Bangumi 搜索并选择你想要的书籍,我们会根据条目信息进行匹配。"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap" />
+
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="BangumiSearchBox"
+                                    PlaceholderText="输入书名搜索 Bangumi…"
+                                    KeyDown="BangumiSearchBox_KeyDown" />
+                                <Button
+                                    Grid.Column="1"
+                                    Style="{ThemeResource AccentButtonStyle}"
+                                    Click="BangumiSearchButton_Click"
+                                    Content="搜索" />
+                            </Grid>
+
+                            <ProgressRing
+                                HorizontalAlignment="Left"
+                                IsActive="{x:Bind ViewModel.IsSearchingBangumi, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.IsSearchingBangumi, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                            <TextBlock
+                                Text="{x:Bind ViewModel.BangumiHint, Mode=OneWay}"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.HasBangumiHint, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.BangumiResults, Mode=OneWay}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Orientation="Vertical" Spacing="8" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="models:BangumiBook">
                                     <Button
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Stretch"
                                         Padding="10"
-                                        Click="BangumiResult_Click">
+                                        Click="BangumiResult_Click"
+                                        Tag="{x:Bind}">
                                         <Grid ColumnSpacing="12">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="40" />
@@ -257,7 +294,8 @@
                                     </Button>
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
-                        </ItemsRepeater>
+                            </ItemsRepeater>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -271,39 +309,6 @@
                     Visibility="{x:Bind ViewModel.IsComicAssociation, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel Spacing="12">
                         <TextBlock Text="关联现有漫画（可选）" FontSize="16" FontWeight="SemiBold" />
-                        <TextBlock
-                            Text="搜索并选择对应漫画,有助于我们更快定位资源问题。"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextWrapping="Wrap" />
-
-                        <Grid ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox
-                                x:Name="ComicSearchBox"
-                                PlaceholderText="输入漫画名搜索…"
-                                KeyDown="ComicSearchBox_KeyDown" />
-                            <Button
-                                Grid.Column="1"
-                                Style="{ThemeResource AccentButtonStyle}"
-                                Click="ComicSearchButton_Click"
-                                Content="搜索" />
-                        </Grid>
-
-                        <ProgressRing
-                            HorizontalAlignment="Left"
-                            IsActive="{x:Bind ViewModel.IsSearchingComic, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.IsSearchingComic, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
-
-                        <TextBlock
-                            Text="{x:Bind ViewModel.ComicHint, Mode=OneWay}"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            TextWrapping="Wrap"
-                            Visibility="{x:Bind ViewModel.HasComicHint, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
 
                         <Border
                             Padding="12"
@@ -340,25 +345,69 @@
                                 </StackPanel>
                                 <Button
                                     Grid.Column="2"
+                                    Width="34"
+                                    Height="34"
+                                    Padding="0"
                                     VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
                                     Click="ClearComicButton_Click"
-                                    Content="取消关联" />
+                                    ToolTipService.ToolTip="取消关联">
+                                    <FontIcon Glyph="&#xE711;" FontSize="14" />
+                                </Button>
                             </Grid>
                         </Border>
 
-                        <ItemsRepeater
-                            ItemsSource="{x:Bind ViewModel.ComicResults, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.ShowComicResults, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
-                            <ItemsRepeater.Layout>
-                                <StackLayout Orientation="Vertical" Spacing="8" />
-                            </ItemsRepeater.Layout>
-                            <ItemsRepeater.ItemTemplate>
+                        <!-- 搜索区:选定漫画后整体隐藏 -->
+                        <StackPanel
+                            Spacing="12"
+                            Visibility="{x:Bind ViewModel.ShowComicSearch, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock
+                                Text="搜索并选择对应漫画,有助于我们更快定位资源问题。"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap" />
+
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox
+                                    x:Name="ComicSearchBox"
+                                    PlaceholderText="输入漫画名搜索…"
+                                    KeyDown="ComicSearchBox_KeyDown" />
+                                <Button
+                                    Grid.Column="1"
+                                    Style="{ThemeResource AccentButtonStyle}"
+                                    Click="ComicSearchButton_Click"
+                                    Content="搜索" />
+                            </Grid>
+
+                            <ProgressRing
+                                HorizontalAlignment="Left"
+                                IsActive="{x:Bind ViewModel.IsSearchingComic, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.IsSearchingComic, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                            <TextBlock
+                                Text="{x:Bind ViewModel.ComicHint, Mode=OneWay}"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind ViewModel.HasComicHint, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.ComicResults, Mode=OneWay}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Orientation="Vertical" Spacing="8" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="models:ComicListItem">
                                     <Button
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Stretch"
                                         Padding="10"
-                                        Click="ComicResult_Click">
+                                        Click="ComicResult_Click"
+                                        Tag="{x:Bind}">
                                         <Grid ColumnSpacing="12">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="40" />
@@ -390,33 +439,8 @@
                                     </Button>
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
-                        </ItemsRepeater>
-                    </StackPanel>
-                </Border>
-
-                <!-- 标题与描述 -->
-                <Border
-                    Padding="16"
-                    CornerRadius="10"
-                    BorderThickness="1"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="12">
-                        <TextBox
-                            x:Name="TitleTextBox"
-                            Header="工单标题（必填）"
-                            MaxLength="80"
-                            PlaceholderText="一句话描述你的反馈"
-                            TextChanged="TitleTextBox_TextChanged" />
-                        <TextBox
-                            x:Name="DescriptionTextBox"
-                            Header="详细描述（可选）"
-                            AcceptsReturn="True"
-                            MaxLength="1000"
-                            MinHeight="108"
-                            TextWrapping="Wrap"
-                            PlaceholderText="补充更多细节有助于更快受理"
-                            TextChanged="DescriptionTextBox_TextChanged" />
+                            </ItemsRepeater>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

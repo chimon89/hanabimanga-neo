@@ -40,6 +40,26 @@
                     <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#C75479" />
                     <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#33E23A6D" />
                     <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="#66E23A6D" />
+                    <SolidColorBrush x:Key="AccentFillColorSelectedTextBackgroundBrush" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonBackground" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#E75A84" />
+                    <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#BE315C" />
+                    <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#66E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="#CCFFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrush" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrushPointerOver" Color="#E75A84" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrushPressed" Color="#BE315C" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="#66E23A6D" />
+                    <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#6F223A" />
+                    <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#4C1729" />
+                    <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush" Color="#8F2D4F" />
+                    <SolidColorBrush x:Key="AccentTextFillColorDisabledBrush" Color="#A98494" />
+                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="TextControlElevationBorderFocusedBrush" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentControlElevationBorderBrush" Color="#E23A6D" />
                     <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#E6FFF7FA" />
                     <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#D9FFE8F0" />
                     <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#CCF9D7E4" />
@@ -57,6 +77,7 @@
                     <SolidColorBrush x:Key="NavigationViewItemHeaderForeground" Color="#80566A" />
                     <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#28E23A6D" />
                     <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#33E23A6D" />
+                    <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#E23A6D" />
                     <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="#8F2D4F" />
                     <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="#6F223A" />
                     <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="#4C1729" />
@@ -72,6 +93,11 @@
                         <GradientStop Color="#F2FFF3F7" Offset="0" />
                         <GradientStop Color="#E6FFDCE8" Offset="0.46" />
                         <GradientStop Color="#EFFFFAFB" Offset="1" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="PointsPanelBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FFF378A2" Offset="0" />
+                        <GradientStop Color="#FFFF9EBB" Offset="0.55" />
+                        <GradientStop Color="#FFF7B2C6" Offset="1" />
                     </LinearGradientBrush>
                 </ResourceDictionary>
 
@@ -99,6 +125,26 @@
                     <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#D66F96" />
                     <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#40E23A6D" />
                     <SolidColorBrush x:Key="AccentFillColorDisabledBrush" Color="#66E23A6D" />
+                    <SolidColorBrush x:Key="AccentFillColorSelectedTextBackgroundBrush" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonBackground" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#E65687" />
+                    <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#CC3462" />
+                    <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#66E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="#CCFFFFFF" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrush" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrushPointerOver" Color="#E65687" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrushPressed" Color="#CC3462" />
+                    <SolidColorBrush x:Key="AccentButtonBorderBrushDisabled" Color="#66E23A6D" />
+                    <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FDE8EF" />
+                    <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#FDE8EF" />
+                    <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush" Color="#FAD0DE" />
+                    <SolidColorBrush x:Key="AccentTextFillColorDisabledBrush" Color="#80A65D77" />
+                    <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="TextControlElevationBorderFocusedBrush" Color="#E23A6D" />
+                    <SolidColorBrush x:Key="AccentControlElevationBorderBrush" Color="#E23A6D" />
                     <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="#FFF3F7" />
                     <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#B33B2833" />
@@ -113,6 +159,7 @@
                     <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#FAD0DE" />
                     <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#33E23A6D" />
                     <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#40E23A6D" />
+                    <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#E23A6D" />
                     <SolidColorBrush x:Key="SakuraBannerCaptionBackgroundBrush" Color="#E621141D" />
                     <SolidColorBrush x:Key="ContinueReadingBarBackgroundBrush" Color="#D92A1B25" />
                     <SolidColorBrush x:Key="ContinueReadingBarPointerOverBackgroundBrush" Color="#EF3A2633" />
@@ -120,6 +167,11 @@
                         <GradientStop Color="#F220151D" Offset="0" />
                         <GradientStop Color="#E63B2131" Offset="0.48" />
                         <GradientStop Color="#EF1A1017" Offset="1" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="PointsPanelBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#FFC85A82" Offset="0" />
+                        <GradientStop Color="#FFD9748F" Offset="0.55" />
+                        <GradientStop Color="#FFB85F73" Offset="1" />
                     </LinearGradientBrush>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>

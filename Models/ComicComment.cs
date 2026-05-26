@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using Newtonsoft.Json;
 
 namespace hanabimanga.Models
@@ -28,7 +27,7 @@ namespace hanabimanga.Models
         public string? AvatarUrl { get; set; }
         public bool IsMine { get; set; }
 
-        public string AvatarPreviewUrl => ToAvatarPreviewUrl(AvatarUrl);
+        public string AvatarPreviewUrl => AvatarAsset.ResolvePreviewUrl(AvatarUrl);
         public string CreatedAtText => FormatCreatedAt(CreatedAt);
         public bool HasStatusNote => Status != "public";
         public string StatusText => Status switch
@@ -66,24 +65,6 @@ namespace hanabimanga.Models
             if (elapsed.TotalDays < 7) return $"{Math.Max(1, (int)elapsed.TotalDays)} 天前";
 
             return localTime.ToString("yyyy-MM-dd");
-        }
-
-        private static string ToAvatarPreviewUrl(string? avatarUrl)
-        {
-            if (string.IsNullOrWhiteSpace(avatarUrl))
-            {
-                return "ms-appx:///Assets/avatar/ic_avatar_default.webp";
-            }
-
-            if (Uri.TryCreate(avatarUrl, UriKind.Absolute, out _))
-            {
-                return avatarUrl;
-            }
-
-            var fileName = Path.GetFileName(avatarUrl.Trim().Replace('\\', '/'));
-            return string.IsNullOrWhiteSpace(fileName)
-                ? "ms-appx:///Assets/avatar/ic_avatar_default.webp"
-                : $"ms-appx:///Assets/avatar/{fileName}";
         }
     }
 

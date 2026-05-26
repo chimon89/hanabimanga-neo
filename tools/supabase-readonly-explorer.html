@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Supabase Read-only Explorer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface-2: #eef2f6;
+      --text: #17202a;
+      --muted: #647084;
+      --line: #d9e0e8;
+      --accent: #0c7c66;
+      --accent-2: #1f6feb;
+      --danger: #b42318;
+      --warning: #9a6700;
+      --ok: #0f7b45;
+      --shadow: 0 18px 46px rgba(26, 38, 52, 0.12);
+      --radius: 8px;
+      font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      padding: 0 12px;
+      transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      border-color: #aeb9c6;
+      background: #f9fbfc;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: white;
+      font-weight: 650;
+    }
+
+    button.primary:hover {
+      background: #096f5b;
+    }
+
+    button.icon {
+      width: 36px;
+      padding: 0;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      padding: 9px 10px;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--accent-2);
+      box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.14);
+    }
+
+    textarea {
+      min-height: 88px;
+      resize: vertical;
+      font-family: Consolas, "Cascadia Mono", monospace;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 5px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 116px;
+      gap: 10px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .hint {
+      padding: 10px 12px;
+      border: 1px solid #cfe3db;
+      background: #f0faf6;
+      color: #1d5f4d;
+      border-radius: var(--radius);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .hint.warning {
+      border-color: #f0d58a;
+      background: #fff8df;
+      color: #705500;
+    }
+
+    .hint.danger {
+      border-color: #f2b8b5;
+      background: #fff2f0;
+      color: var(--danger);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: var(--surface-2);
+      border: 1px solid transparent;
+      color: #344054;
+      font-size: 12px;
+    }
+
+    .chip:hover {
+      border-color: #c9d3df;
+      background: #fff;
+    }
+
+    .main {
+      min-width: 0;
+      padding: 22px;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .query {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .query-grid {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) 110px 110px;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .filters {
+      display: grid;
+      gap: 10px;
+    }
+
+    .filter-row {
+      display: grid;
+      grid-template-columns: minmax(130px, 1fr) 122px minmax(150px, 1.2fr) 36px;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .request-line {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 10px;
+      align-items: center;
+      background: #101828;
+      color: #e6edf3;
+      border-radius: var(--radius);
+      padding: 10px;
+    }
+
+    .request-line code {
+      overflow: auto;
+      white-space: nowrap;
+      font-size: 12px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+    }
+
+    .statusbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .statusbar strong {
+      color: var(--text);
+    }
+
+    .results {
+      min-height: 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .results-head {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfd;
+    }
+
+    .results-head h2 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .table-wrap {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f8fafc;
+      color: #344054;
+      font-weight: 700;
+    }
+
+    td {
+      max-width: 360px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    td pre {
+      margin: 0;
+      max-height: 88px;
+      overflow: auto;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 280px;
+      color: var(--muted);
+      text-align: center;
+      padding: 32px;
+    }
+
+    .drawer {
+      border-top: 1px solid var(--line);
+      background: #fbfcfd;
+      padding: 12px;
+      display: none;
+    }
+
+    .drawer.open {
+      display: block;
+    }
+
+    .drawer pre {
+      margin: 0;
+      max-height: 240px;
+      overflow: auto;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 0 9px;
+      background: #eef6ff;
+      color: #175cd3;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .pill.ok {
+      background: #edfcf2;
+      color: var(--ok);
+    }
+
+    .pill.warn {
+      background: #fff7e0;
+      color: var(--warning);
+    }
+
+    @media (max-width: 980px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .main {
+        min-height: 720px;
+      }
+
+      .query-grid,
+      .field-row,
+      .filter-row,
+      .request-line {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <h1>Supabase Read-only Explorer</h1>
+        <p>用 public / anon key 通过 Data API 调试数据。此页面只发 GET 请求，不会执行插入、更新或删除。</p>
+      </div>
+
+      <div id="keyWarning" class="hint warning">
+        不要粘贴 service_role 或 secret key。它们会绕过 RLS，只能放在受控后端。
+      </div>
+
+      <section class="panel">
+        <label>
+          Supabase URL
+          <input id="urlInput" placeholder="https://your-project.supabase.co" autocomplete="off">
+        </label>
+        <label>
+          Public / anon key
+          <textarea id="keyInput" placeholder="sb_publishable_... 或 legacy anon JWT" autocomplete="off" spellcheck="false"></textarea>
+        </label>
+        <label>
+          用户 access_token，可选
+          <textarea id="jwtInput" placeholder="需要模拟登录用户时填写；留空则使用 anon 角色" autocomplete="off" spellcheck="false"></textarea>
+        </label>
+        <div class="toolbar">
+          <button id="saveBtn">保存到本机</button>
+          <button id="clearBtn">清空</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <label>常用表</label>
+        <div id="presetTables" class="chips"></div>
+      </section>
+
+      <div class="hint">
+        能看到哪些表和行，取决于 Supabase 的 Data API 暴露设置、Postgres GRANT 和 RLS policy。看不到数据时，优先检查这些权限。
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="query">
+        <div class="query-grid">
+          <label>
+            表 / 视图
+            <input id="tableInput" placeholder="profiles">
+          </label>
+          <label>
+            字段 select
+            <input id="selectInput" value="*" placeholder="id,username,created_at">
+          </label>
+          <label>
+            limit
+            <input id="limitInput" type="number" min="1" max="1000" value="50">
+          </label>
+          <label>
+            offset
+            <input id="offsetInput" type="number" min="0" value="0">
+          </label>
+        </div>
+
+        <div class="query-grid">
+          <label>
+            order 字段
+            <input id="orderFieldInput" placeholder="created_at">
+          </label>
+          <label>
+            order 方向
+            <select id="orderDirectionInput">
+              <option value="desc">desc</option>
+              <option value="asc">asc</option>
+            </select>
+          </label>
+          <label>
+            count
+            <select id="countInput">
+              <option value="">不请求</option>
+              <option value="exact">exact</option>
+              <option value="planned">planned</option>
+              <option value="estimated">estimated</option>
+            </select>
+          </label>
+          <div class="toolbar">
+            <button id="addFilterBtn">添加过滤</button>
+            <button class="primary" id="runBtn">查询</button>
+          </div>
+        </div>
+
+        <div class="filters" id="filters"></div>
+
+        <div class="request-line">
+          <code id="requestPreview">GET /rest/v1/...</code>
+          <button id="copyUrlBtn">复制 URL</button>
+          <button id="copyCurlBtn">复制 curl</button>
+        </div>
+      </section>
+
+      <div class="statusbar">
+        <span id="statusText">准备查询。</span>
+        <span id="rolePill" class="pill">anon</span>
+      </div>
+
+      <section class="results">
+        <div class="results-head">
+          <h2>结果</h2>
+          <div class="toolbar">
+            <span id="countText" class="pill ok">0 rows</span>
+            <button id="toggleJsonBtn">JSON</button>
+            <button id="downloadBtn">下载 JSON</button>
+          </div>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <div class="empty">填入 URL 和 public key 后开始查询。</div>
+        </div>
+        <div class="drawer" id="jsonDrawer">
+          <pre id="jsonOutput">[]</pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const presetTables = [
+      "profiles",
+      "comics",
+      "chapters",
+      "categories",
+      "comic_tags",
+      "comments",
+      "reading_history",
+      "task_definitions",
+      "products",
+      "points_ledger",
+      "user_task_progress",
+      "badge_definitions",
+      "user_badges",
+      "kanban_tickets",
+      "ticket_votes",
+      "announcements"
+    ];
+
+    const operators = [
+      ["eq", "等于"],
+      ["neq", "不等于"],
+      ["gt", "大于"],
+      ["gte", "大于等于"],
+      ["lt", "小于"],
+      ["lte", "小于等于"],
+      ["like", "like"],
+      ["ilike", "ilike"],
+      ["is", "is"],
+      ["in", "in (...)"],
+      ["cs", "contains"],
+      ["cd", "contained by"]
+    ];
+
+    const els = {
+      url: document.querySelector("#urlInput"),
+      key: document.querySelector("#keyInput"),
+      jwt: document.querySelector("#jwtInput"),
+      table: document.querySelector("#tableInput"),
+      select: document.querySelector("#selectInput"),
+      limit: document.querySelector("#limitInput"),
+      offset: document.querySelector("#offsetInput"),
+      orderField: document.querySelector("#orderFieldInput"),
+      orderDirection: document.querySelector("#orderDirectionInput"),
+      count: document.querySelector("#countInput"),
+      filters: document.querySelector("#filters"),
+      requestPreview: document.querySelector("#requestPreview"),
+      status: document.querySelector("#statusText"),
+      rolePill: document.querySelector("#rolePill"),
+      tableWrap: document.querySelector("#tableWrap"),
+      jsonDrawer: document.querySelector("#jsonDrawer"),
+      jsonOutput: document.querySelector("#jsonOutput"),
+      countText: document.querySelector("#countText"),
+      keyWarning: document.querySelector("#keyWarning")
+    };
+
+    let lastRows = [];
+    let lastUrl = "";
+    let lastCurl = "";
+
+    function loadState() {
+      const state = JSON.parse(localStorage.getItem("supabaseReadonlyExplorer") || "{}");
+      els.url.value = state.url || "";
+      els.key.value = state.key || "";
+      els.jwt.value = state.jwt || "";
+      els.table.value = state.table || "profiles";
+      els.select.value = state.select || "*";
+      els.limit.value = state.limit || "50";
+      els.offset.value = state.offset || "0";
+      els.orderField.value = state.orderField || "";
+      els.orderDirection.value = state.orderDirection || "desc";
+      els.count.value = state.count || "";
+      (state.filters || []).forEach(addFilter);
+    }
+
+    function saveState() {
+      const state = {
+        url: els.url.value.trim(),
+        key: els.key.value.trim(),
+        jwt: els.jwt.value.trim(),
+        table: els.table.value.trim(),
+        select: els.select.value.trim(),
+        limit: els.limit.value,
+        offset: els.offset.value,
+        orderField: els.orderField.value.trim(),
+        orderDirection: els.orderDirection.value,
+        count: els.count.value,
+        filters: getFilters()
+      };
+      localStorage.setItem("supabaseReadonlyExplorer", JSON.stringify(state));
+      setStatus("已保存到当前浏览器的 localStorage。", "ok");
+    }
+
+    function clearState() {
+      localStorage.removeItem("supabaseReadonlyExplorer");
+      [els.url, els.key, els.jwt, els.table, els.orderField].forEach(el => el.value = "");
+      els.select.value = "*";
+      els.limit.value = "50";
+      els.offset.value = "0";
+      els.count.value = "";
+      els.filters.innerHTML = "";
+      addFilter();
+      updatePreview();
+      setStatus("已清空本机保存的配置。", "warn");
+    }
+
+    function decodeJwt(token) {
+      const parts = token.split(".");
+      if (parts.length < 2) return null;
+      try {
+        const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+        const json = decodeURIComponent(atob(base64).split("").map(ch => {
+          return "%" + ("00" + ch.charCodeAt(0).toString(16)).slice(-2);
+        }).join(""));
+        return JSON.parse(json);
+      } catch {
+        return null;
+      }
+    }
+
+    function detectKeyRisk() {
+      const key = els.key.value.trim();
+      const payload = decodeJwt(key);
+      const role = payload?.role || (els.jwt.value.trim() ? "authenticated" : "anon");
+
+      els.rolePill.textContent = role;
+      els.rolePill.className = role === "authenticated" ? "pill ok" : "pill";
+
+      if (key.startsWith("sb_secret_") || payload?.role === "service_role") {
+        els.keyWarning.className = "hint danger";
+        els.keyWarning.textContent = "检测到 secret/service_role key。为了避免绕过 RLS，此工具已阻止查询。请改用 publishable/anon key。";
+        return false;
+      }
+
+      els.keyWarning.className = "hint warning";
+      els.keyWarning.textContent = "不要粘贴 service_role 或 secret key。它们会绕过 RLS，只能放在受控后端。";
+      return true;
+    }
+
+    function normalizeBaseUrl(raw) {
+      const url = raw.trim().replace(/\/+$/, "");
+      if (!url) throw new Error("请填写 Supabase URL。");
+      if (!/^https?:\/\//i.test(url)) throw new Error("Supabase URL 需要以 http:// 或 https:// 开头。");
+      return url.endsWith("/rest/v1") ? url : `${url}/rest/v1`;
+    }
+
+    function encodeRestValue(op, value) {
+      const trimmed = value.trim();
+      if (op === "in" && !trimmed.startsWith("(")) return `(${trimmed})`;
+      return trimmed;
+    }
+
+    function buildUrl() {
+      const base = normalizeBaseUrl(els.url.value);
+      const table = els.table.value.trim();
+      if (!table) throw new Error("请填写表名或视图名。");
+
+      const params = new URLSearchParams();
+      params.set("select", els.select.value.trim() || "*");
+
+      const limit = Number(els.limit.value || 50);
+      const offset = Number(els.offset.value || 0);
+      if (Number.isFinite(limit) && limit > 0) params.set("limit", String(Math.min(limit, 1000)));
+      if (Number.isFinite(offset) && offset > 0) params.set("offset", String(offset));
+
+      const orderField = els.orderField.value.trim();
+      if (orderField) params.set("order", `${orderField}.${els.orderDirection.value}`);
+
+      for (const filter of getFilters()) {
+        if (!filter.column || !filter.value) continue;
+        params.append(filter.column, `${filter.operator}.${encodeRestValue(filter.operator, filter.value)}`);
+      }
+
+      return `${base}/${encodeURIComponent(table)}?${params.toString()}`;
+    }
+
+    function getHeaders() {
+      const key = els.key.value.trim();
+      if (!key) throw new Error("请填写 public / anon key。");
+      const headers = { apikey: key };
+      const jwt = els.jwt.value.trim();
+      if (jwt) headers.Authorization = `Bearer ${jwt}`;
+      return headers;
+    }
+
+    function makeCurl(url) {
+      const headers = getHeaders();
+      const lines = [`curl "${url}"`, `  -H "apikey: ${headers.apikey}"`];
+      if (headers.Authorization) lines.push(`  -H "Authorization: ${headers.Authorization}"`);
+      if (els.count.value) lines.push(`  -H "Prefer: count=${els.count.value}"`);
+      return lines.join(" \\\n");
+    }
+
+    function getFilters() {
+      return [...els.filters.querySelectorAll(".filter-row")].map(row => ({
+        column: row.querySelector("[data-filter-column]").value.trim(),
+        operator: row.querySelector("[data-filter-operator]").value,
+        value: row.querySelector("[data-filter-value]").value.trim()
+      }));
+    }
+
+    function addFilter(filter = {}) {
+      const row = document.createElement("div");
+      row.className = "filter-row";
+      row.innerHTML = `
+        <label>字段<input data-filter-column placeholder="id"></label>
+        <label>操作符<select data-filter-operator></select></label>
+        <label>值<input data-filter-value placeholder="123"></label>
+        <button class="icon" title="删除过滤" aria-label="删除过滤">×</button>
+      `;
+      const select = row.querySelector("[data-filter-operator]");
+      for (const [value, label] of operators) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      row.querySelector("[data-filter-column]").value = filter.column || "";
+      select.value = filter.operator || "eq";
+      row.querySelector("[data-filter-value]").value = filter.value || "";
+      row.querySelector("button").addEventListener("click", () => {
+        row.remove();
+        updatePreview();
+      });
+      row.addEventListener("input", updatePreview);
+      row.addEventListener("change", updatePreview);
+      els.filters.appendChild(row);
+    }
+
+    function updatePreview() {
+      detectKeyRisk();
+      try {
+        lastUrl = buildUrl();
+        lastCurl = makeCurl(lastUrl);
+        els.requestPreview.textContent = `GET ${lastUrl}`;
+      } catch (error) {
+        els.requestPreview.textContent = error.message;
+      }
+    }
+
+    function setStatus(message, tone = "") {
+      els.status.textContent = message;
+      els.status.style.color = tone === "error" ? "var(--danger)" : tone === "ok" ? "var(--ok)" : tone === "warn" ? "var(--warning)" : "var(--muted)";
+    }
+
+    function formatCell(value) {
+      if (value === null) return "null";
+      if (value === undefined) return "";
+      if (typeof value === "object") return JSON.stringify(value, null, 2);
+      return String(value);
+    }
+
+    function renderRows(rows) {
+      lastRows = Array.isArray(rows) ? rows : [rows];
+      els.jsonOutput.textContent = JSON.stringify(lastRows, null, 2);
+      els.countText.textContent = `${lastRows.length} rows`;
+
+      if (!lastRows.length) {
+        els.tableWrap.innerHTML = `<div class="empty">查询成功，但没有返回行。</div>`;
+        return;
+      }
+
+      const columns = [...new Set(lastRows.flatMap(row => Object.keys(row || {})))];
+      if (!columns.length) {
+        els.tableWrap.innerHTML = `<div class="empty">返回内容不是对象列表，请查看 JSON。</div>`;
+        return;
+      }
+
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      for (const column of columns) {
+        const th = document.createElement("th");
+        th.textContent = column;
+        headRow.appendChild(th);
+      }
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      for (const row of lastRows) {
+        const tr = document.createElement("tr");
+        for (const column of columns) {
+          const td = document.createElement("td");
+          const value = row?.[column];
+          if (value && typeof value === "object") {
+            const pre = document.createElement("pre");
+            pre.textContent = formatCell(value);
+            td.appendChild(pre);
+          } else {
+            td.textContent = formatCell(value);
+            td.title = td.textContent;
+          }
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      els.tableWrap.replaceChildren(table);
+    }
+
+    async function runQuery() {
+      if (!detectKeyRisk()) {
+        setStatus("已阻止高权限 key 查询。", "error");
+        return;
+      }
+
+      let url;
+      try {
+        url = buildUrl();
+      } catch (error) {
+        setStatus(error.message, "error");
+        return;
+      }
+
+      const headers = getHeaders();
+      if (els.count.value) headers.Prefer = `count=${els.count.value}`;
+
+      const started = performance.now();
+      setStatus("查询中...");
+      els.tableWrap.innerHTML = `<div class="empty">正在请求 Data API...</div>`;
+
+      try {
+        const response = await fetch(url, { method: "GET", headers });
+        const text = await response.text();
+        const duration = Math.round(performance.now() - started);
+        const contentRange = response.headers.get("content-range");
+
+        let payload;
+        try {
+          payload = text ? JSON.parse(text) : [];
+        } catch {
+          payload = [{ raw: text }];
+        }
+
+        if (!response.ok) {
+          renderRows(Array.isArray(payload) ? payload : [payload]);
+          setStatus(`HTTP ${response.status}: ${payload.message || payload.error || response.statusText}`, "error");
+          return;
+        }
+
+        renderRows(payload);
+        setStatus(`HTTP ${response.status} · ${duration} ms${contentRange ? ` · ${contentRange}` : ""}`, "ok");
+      } catch (error) {
+        els.tableWrap.innerHTML = `<div class="empty">请求失败。常见原因是 URL/key 错误、表没有暴露给 Data API，或浏览器 CORS 限制。</div>`;
+        setStatus(error.message, "error");
+      }
+    }
+
+    async function copyText(value, label) {
+      try {
+        await navigator.clipboard.writeText(value);
+        setStatus(`已复制 ${label}。`, "ok");
+      } catch {
+        setStatus("浏览器阻止了剪贴板访问。", "warn");
+      }
+    }
+
+    function downloadJson() {
+      const blob = new Blob([JSON.stringify(lastRows, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${els.table.value.trim() || "supabase"}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function initPresets() {
+      const host = document.querySelector("#presetTables");
+      for (const name of presetTables) {
+        const button = document.createElement("button");
+        button.className = "chip";
+        button.textContent = name;
+        button.addEventListener("click", () => {
+          els.table.value = name;
+          updatePreview();
+        });
+        host.appendChild(button);
+      }
+    }
+
+    document.querySelector("#saveBtn").addEventListener("click", saveState);
+    document.querySelector("#clearBtn").addEventListener("click", clearState);
+    document.querySelector("#addFilterBtn").addEventListener("click", () => addFilter());
+    document.querySelector("#runBtn").addEventListener("click", runQuery);
+    document.querySelector("#copyUrlBtn").addEventListener("click", () => copyText(lastUrl || buildUrl(), "URL"));
+    document.querySelector("#copyCurlBtn").addEventListener("click", () => copyText(lastCurl || makeCurl(buildUrl()), "curl"));
+    document.querySelector("#toggleJsonBtn").addEventListener("click", () => els.jsonDrawer.classList.toggle("open"));
+    document.querySelector("#downloadBtn").addEventListener("click", downloadJson);
+
+    for (const el of [els.url, els.key, els.jwt, els.table, els.select, els.limit, els.offset, els.orderField, els.orderDirection, els.count]) {
+      el.addEventListener("input", updatePreview);
+      el.addEventListener("change", updatePreview);
+    }
+
+    initPresets();
+    loadState();
+    if (!els.filters.children.length) addFilter();
+    updatePreview();
+  </script>
+</body>
+</html>

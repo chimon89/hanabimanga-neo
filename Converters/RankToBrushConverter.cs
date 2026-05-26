@@ -14,10 +14,11 @@ namespace hanabimanga.Converters
         {
             var rank = value is int i ? i : 0;
             if (rank is >= 1 and <= 3 &&
-                Application.Current.Resources.TryGetValue("SystemAccentColor", out var accent) &&
-                accent is Color accentColor)
+                Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out var accent) &&
+                accent is Brush accentBrush)
             {
-                return new SolidColorBrush(accentColor);
+                // 返回共享的强调色画刷实例,切换外观配色时角标随之实时更新。
+                return accentBrush;
             }
 
             return new SolidColorBrush(Color.FromArgb(0xCC, 0x00, 0x00, 0x00));

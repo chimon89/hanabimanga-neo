@@ -12,6 +12,12 @@
     <Page.Resources>
         <converters:StringToImageSourceConverter x:Key="StringToImageSource" />
         <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <Style x:Key="FeedbackVoteButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+            <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
     </Page.Resources>
 
     <Grid>
@@ -124,7 +130,10 @@
                                     CornerRadius="10"
                                     BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    Tag="{x:Bind}"
+                                    Tapped="TicketCard_Tapped"
+                                    ToolTipService.ToolTip="查看反馈详情">
                                     <StackPanel Spacing="10">
                                         <Grid ColumnSpacing="10">
                                             <Grid.ColumnDefinitions>
@@ -164,12 +173,12 @@
                                                 Padding="9,3"
                                                 VerticalAlignment="Center"
                                                 CornerRadius="6"
-                                                Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                                Background="{ThemeResource AccentFillColorDefaultBrush}">
                                                 <TextBlock
                                                     Text="{x:Bind StatusText}"
                                                     FontSize="12"
                                                     FontWeight="SemiBold"
-                                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                             </Border>
                                         </Grid>
 
@@ -241,15 +250,31 @@
                                                 Grid.Column="1"
                                                 Padding="12,6"
                                                 VerticalAlignment="Center"
+                                                Style="{StaticResource FeedbackVoteButtonStyle}"
                                                 IsEnabled="{x:Bind CanVote}"
                                                 Click="VoteButton_Click"
+                                                Tag="{x:Bind}"
                                                 ToolTipService.ToolTip="共鸣">
+                                                <Button.Resources>
+                                                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="AccentFillColorSecondaryBrush" />
+                                                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="AccentFillColorSecondaryBrush" />
+                                                    <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="AccentFillColorDisabledBrush" />
+                                                    <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="AccentFillColorSecondaryBrush" />
+                                                    <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="AccentFillColorSecondaryBrush" />
+                                                    <StaticResource x:Key="ButtonBorderBrushDisabled" ResourceKey="AccentFillColorDisabledBrush" />
+                                                    <StaticResource x:Key="ButtonForegroundPointerOver" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
+                                                    <StaticResource x:Key="ButtonForegroundPressed" ResourceKey="TextOnAccentFillColorPrimaryBrush" />
+                                                    <StaticResource x:Key="ButtonForegroundDisabled" ResourceKey="TextOnAccentFillColorSecondaryBrush" />
+                                                </Button.Resources>
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                                     <FontIcon
                                                         Glyph="{x:Bind VoteGlyph, Mode=OneWay}"
                                                         FontSize="14"
-                                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                                                    <TextBlock Text="{x:Bind VoteCountText, Mode=OneWay}" />
+                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                                    <TextBlock
+                                                        Text="{x:Bind VoteActionText, Mode=OneWay}"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                                 </StackPanel>
                                             </Button>
                                         </Grid>

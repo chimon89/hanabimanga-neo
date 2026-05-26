@@ -92,9 +92,14 @@ namespace hanabimanga.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasSelectedBangumiBook));
                 OnPropertyChanged(nameof(ShowBangumiResults));
+                OnPropertyChanged(nameof(ShowBangumiSearch));
                 if (value != null && string.IsNullOrWhiteSpace(_title))
                 {
                     Title = $"请求上架:{value.DisplayName}";
+                }
+                if (value != null)
+                {
+                    BangumiHint = null;
                 }
                 RefreshSubmitState();
             }
@@ -110,6 +115,12 @@ namespace hanabimanga.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasSelectedComic));
                 OnPropertyChanged(nameof(ShowComicResults));
+                OnPropertyChanged(nameof(ShowComicSearch));
+                if (value != null)
+                {
+                    ComicHint = null;
+                }
+                RefreshSubmitState();
             }
         }
 
@@ -218,6 +229,8 @@ namespace hanabimanga.ViewModels
         public bool HasSelectedComic => _selectedComic != null;
         public bool ShowBangumiResults => _selectedBangumiBook == null;
         public bool ShowComicResults => _selectedComic == null;
+        public bool ShowBangumiSearch => _selectedBangumiBook == null;
+        public bool ShowComicSearch => _selectedComic == null;
         public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
         public bool HasFeedback => !string.IsNullOrWhiteSpace(FeedbackMessage);
         public bool HasBangumiHint => !string.IsNullOrWhiteSpace(BangumiHint);
@@ -378,6 +391,7 @@ namespace hanabimanga.ViewModels
                         ["bangumi_id"] = book.Id,
                         ["bangumi_name"] = book.Name,
                         ["bangumi_name_cn"] = book.NameCn,
+                        ["bangumi_cover_url"] = book.CoverUrl,
                     };
                 }
                 else if (IsComicAssociation && _selectedComic is { } comic)
@@ -386,6 +400,9 @@ namespace hanabimanga.ViewModels
                     {
                         ["comic_id"] = comic.ComicId,
                         ["comic_title"] = comic.Title,
+                        ["comic_subtitle"] = comic.Subtitle,
+                        ["comic_cover_url"] = comic.CoverUrl,
+                        ["comic_document_id"] = comic.Id,
                     };
                 }
                 else

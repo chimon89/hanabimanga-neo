@@ -224,13 +224,13 @@ namespace hanabimanga.Pages
             return type?.Trim().ToLowerInvariant() switch
             {
                 "warning" => ("警示",
-                    (Brush)resources["SystemFillColorCautionBackgroundBrush"]),
+                    (Brush)resources["SystemFillColorCautionBrush"]),
                 "error" => ("重要",
-                    (Brush)resources["SystemFillColorCriticalBackgroundBrush"]),
+                    (Brush)resources["SystemFillColorCriticalBrush"]),
                 "success" => ("通知",
-                    (Brush)resources["SystemFillColorSuccessBackgroundBrush"]),
+                    (Brush)resources["SystemFillColorSuccessBrush"]),
                 _ => ("公告",
-                    (Brush)resources["AccentFillColorTertiaryBrush"]),
+                    (Brush)resources["AccentFillColorDefaultBrush"]),
             };
         }
     }

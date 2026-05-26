@@ -90,7 +90,7 @@ namespace hanabimanga.ViewModels
         public int SignInStreak => _document.SignInStreak;
         public string SignInStreakText => $"已连续 {SignInStreak} 天";
         public bool HasSignedInToday => _document.HasSignedInToday;
-        public string SignInButtonText => HasSignedInToday ? "已签到 · 明日见" : "签到领积分";
+        public string SignInButtonText => HasSignedInToday ? "已签到，明日再来" : "签到领积分";
         public string DailyTaskSummary => $"{_document.DailyCompletedCount}/{_document.DailyTotalCount}";
         public string OneTimeTaskSummary => $"{_document.OneTimeCompletedCount}/{_document.OneTimeTotalCount}";
         public string LongTermTaskSummary => $"{_document.LongTermCompletedCount}/{_document.LongTermTotalCount}";

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.CompilerServices;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -72,12 +71,17 @@ namespace hanabimanga.Models
                 _hasVoted = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(VoteGlyph));
+                OnPropertyChanged(nameof(VoteActionText));
             }
         }
 
         public bool CanVote => !IsOwn;
-        public string AvatarPreviewUrl => ToAvatarPreviewUrl(ReporterAvatarUrl);
+        public bool IsBookRequest => Category == FeedbackOptions.CategoryBookRequest;
+        public string AvatarPreviewUrl => AvatarAsset.ResolvePreviewUrl(ReporterAvatarUrl);
         public string VoteCountText => $"+{VoteCount}";
+        public string VoteActionText => HasVoted
+            ? (IsBookRequest ? "已想看" : "已共鸣")
+            : (IsBookRequest ? "我也想看" : "我也遇到了");
         // Segoe MDL2:  HeartFill,  Heart
         public string VoteGlyph => HasVoted ? "" : "";
         public string CreatedAtText => FormatCreatedAt(CreatedAt);
@@ -124,24 +128,6 @@ namespace hanabimanga.Models
             if (elapsed.TotalDays < 7) return $"{Math.Max(1, (int)elapsed.TotalDays)} 天前";
 
             return localTime.ToString("yyyy-MM-dd");
-        }
-
-        private static string ToAvatarPreviewUrl(string? avatarUrl)
-        {
-            if (string.IsNullOrWhiteSpace(avatarUrl))
-            {
-                return "ms-appx:///Assets/avatar/ic_avatar_default.webp";
-            }
-
-            if (Uri.TryCreate(avatarUrl, UriKind.Absolute, out _))
-            {
-                return avatarUrl;
-            }
-
-            var fileName = Path.GetFileName(avatarUrl.Trim().Replace('\\', '/'));
-            return string.IsNullOrWhiteSpace(fileName)
-                ? "ms-appx:///Assets/avatar/ic_avatar_default.webp"
-                : $"ms-appx:///Assets/avatar/{fileName}";
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -222,9 +208,45 @@ namespace hanabimanga.Models
         public DateTime? UpdatedAt { get; set; }
     }
 
+    // 反馈详情页「共鸣用户」列表项。
+    public sealed class TicketVoter
+    {
+        public string UserId { get; set; } = "";
+        public string Name { get; set; } = "花火用户";
+        public string? AvatarUrl { get; set; }
+        public DateTime? VotedAt { get; set; }
+
+        public string AvatarPreviewUrl => AvatarAsset.ResolvePreviewUrl(AvatarUrl);
+
+        public string VotedAtText
+        {
+            get
+            {
+                if (VotedAt == null) return "赞同";
+
+                var localTime = VotedAt.Value.Kind == DateTimeKind.Utc
+                    ? VotedAt.Value.ToLocalTime()
+                    : VotedAt.Value;
+                var elapsed = DateTime.Now - localTime;
+
+                if (elapsed.TotalMinutes < 1) return "赞同于 刚刚";
+                if (elapsed.TotalHours < 1) return $"赞同于 {Math.Max(1, (int)elapsed.TotalMinutes)} 分钟前";
+                if (elapsed.TotalDays < 1) return $"赞同于 {Math.Max(1, (int)elapsed.TotalHours)} 小时前";
+                if (elapsed.TotalDays < 7) return $"赞同于 {Math.Max(1, (int)elapsed.TotalDays)} 天前";
+                return $"赞同于 {localTime:yyyy-MM-dd}";
+            }
+        }
+    }
+
     internal sealed class RawTicketVoteRecord
     {
         [JsonProperty("ticket_id")]
         public string? TicketId { get; set; }
+
+        [JsonProperty("user_id")]
+        public string? UserId { get; set; }
+
+        [JsonProperty("created_at")]
+        public DateTime? CreatedAt { get; set; }
     }
 }

@@ -5,11 +5,12 @@ using System.Threading;
 using Newtonsoft.Json;
 using Supabase.Gotrue;
 using Supabase.Gotrue.Interfaces;
+using Windows.Storage;
 
 namespace hanabimanga.Services
 {
     /// <summary>
-    /// 把 Supabase Auth Session 持久化到 %LocalAppData%\hanabimanga\session.json。
+    /// 把 Supabase Auth Session 持久化到应用本地数据目录。
     /// 由 Supabase Client 在初始化时 LoadSession 还原;
     /// 登录/Token Refresh 后由 SDK 主动 SaveSession;
     /// SignOut 时 DestroySession 清除。
@@ -21,9 +22,7 @@ namespace hanabimanga.Services
 
         public FileSessionPersistence()
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "hanabimanga");
+            var dir = ApplicationData.Current.LocalFolder.Path;
             Directory.CreateDirectory(dir);
             _path = Path.Combine(dir, "session.json");
         }

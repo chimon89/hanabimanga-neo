@@ -88,12 +88,13 @@
                             x:Name="TypeBadge"
                             Padding="10,4"
                             CornerRadius="6"
-                            Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                            Background="{ThemeResource AccentFillColorDefaultBrush}">
                             <TextBlock
                                 x:Name="TypeBadgeText"
                                 Text="公告"
                                 FontSize="12"
-                                FontWeight="SemiBold" />
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                         </Border>
                         <TextBlock
                             x:Name="CreatedAtText"

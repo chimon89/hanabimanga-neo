@@ -53,6 +53,18 @@ namespace hanabimanga.Pages
             await ViewModel.SetReaderViewModeAsync(comboBox.SelectedIndex);
         }
 
+        private async void ApiEndpointComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!ViewModel.IsLoaded || sender is not ComboBox comboBox) return;
+            await ViewModel.SetApiEndpointAsync(comboBox.SelectedIndex);
+        }
+
+        private async void AccentSwatch_Click(object sender, RoutedEventArgs e)
+        {
+            if (!ViewModel.IsLoaded || (sender as FrameworkElement)?.Tag is not string id) return;
+            await ViewModel.SetAccentColorAsync(id);
+        }
+
         private async void ClearCacheButton_Click(object sender, RoutedEventArgs e)
         {
             await ViewModel.ClearCacheAsync();

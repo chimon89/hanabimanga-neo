@@ -127,12 +127,6 @@ namespace hanabimanga.ViewModels
             string query,
             bool isRandomMode)
         {
-            if (!SupabaseService.Instance.IsInitialized)
-            {
-                ErrorMessage = "Supabase 未初始化:请检查 appsettings.local.json 中的 Url / AnonKey。";
-                return;
-            }
-
             IsLoading = true;
             ErrorMessage = null;
             Query = query;
@@ -141,6 +135,14 @@ namespace hanabimanga.ViewModels
             IsRandomMode = isRandomMode;
             Items.Clear();
             RefreshItemProperties();
+            await App.SupabaseInitialization;
+
+            if (!SupabaseService.Instance.IsInitialized)
+            {
+                ErrorMessage = "Supabase 未初始化:请检查 appsettings.local.json 中的 Url / AnonKey。";
+                IsLoading = false;
+                return;
+            }
 
             try
             {

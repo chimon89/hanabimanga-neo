@@ -89,10 +89,138 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
+                    <!-- 外观配色 -->
                     <Border
                         Grid.Row="0"
+                        Padding="18"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}">
+                        <StackPanel Spacing="14">
+                            <StackPanel Spacing="2">
+                                <TextBlock
+                                    Text="外观配色"
+                                    FontSize="17"
+                                    FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="选择强调色,背景与卡片会随之换色,切换后立即生效"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.AccentColorOptions, Mode=OneWay}">
+                                <ItemsRepeater.Layout>
+                                    <UniformGridLayout
+                                        Orientation="Horizontal"
+                                        MinItemWidth="92"
+                                        MinItemHeight="84"
+                                        MinColumnSpacing="4"
+                                        MinRowSpacing="4" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="models:ThemeColorOption">
+                                        <Button
+                                            Padding="6"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            HorizontalAlignment="Center"
+                                            Click="AccentSwatch_Click"
+                                            Tag="{x:Bind Id}"
+                                            ToolTipService.ToolTip="{x:Bind Name}">
+                                            <StackPanel Spacing="6">
+                                                <Grid Width="44" Height="44" HorizontalAlignment="Center">
+                                                    <Ellipse
+                                                        Width="44"
+                                                        Height="44"
+                                                        Fill="{x:Bind Swatch}" />
+                                                    <Ellipse
+                                                        Width="44"
+                                                        Height="44"
+                                                        StrokeThickness="2"
+                                                        Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                                        Visibility="{x:Bind IsSelected, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                                                    <FontIcon
+                                                        Glyph="&#xE73E;"
+                                                        FontSize="16"
+                                                        Foreground="White"
+                                                        Visibility="{x:Bind IsSelected, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                                                </Grid>
+                                                <TextBlock
+                                                    Text="{x:Bind Name}"
+                                                    FontSize="12"
+                                                    HorizontalAlignment="Center"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 接口线路 -->
+                    <Border
+                        Grid.Row="1"
+                        Padding="18"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}">
+                        <Grid RowSpacing="14">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock
+                                    Text="接口线路"
+                                    FontSize="17"
+                                    FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="{x:Bind ViewModel.ActiveEndpointText, Mode=OneWay}"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <Grid
+                                Grid.Row="1"
+                                ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="1">
+                                    <TextBlock
+                                        Text="接口地址"
+                                        VerticalAlignment="Center"
+                                        FontWeight="SemiBold" />
+                                    <TextBlock
+                                        Text="国内用户推荐使用加速线路,切换后立即生效"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <ComboBox
+                                    Grid.Column="1"
+                                    Width="200"
+                                    SelectedIndex="{x:Bind ViewModel.ApiEndpointSelectedIndex, Mode=OneWay}"
+                                    SelectionChanged="ApiEndpointComboBox_SelectionChanged">
+                                    <ComboBoxItem Content="自动选择" />
+                                    <ComboBoxItem Content="国际线路" />
+                                    <ComboBoxItem Content="国内加速" />
+                                </ComboBox>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <!-- 阅读缓存 -->
+                    <Border
+                        Grid.Row="2"
                         Padding="18"
                         CornerRadius="8"
                         BorderThickness="1"
@@ -209,6 +337,8 @@
                                     Grid.Column="1"
                                     Minimum="1"
                                     Maximum="8"
+                                    Background="{ThemeResource ControlFillColorTransparentBrush}"
+                                    Foreground="{ThemeResource AccentFillColorDefaultBrush}"
                                     StepFrequency="1"
                                     SmallChange="1"
                                     LargeChange="1"
@@ -225,7 +355,7 @@
                     </Border>
 
                     <Border
-                        Grid.Row="1"
+                        Grid.Row="3"
                         Padding="18"
                         CornerRadius="8"
                         BorderThickness="1"

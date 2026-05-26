@@ -163,7 +163,7 @@ namespace hanabimanga.Pages
 
         private void BangumiResult_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is not BangumiBook book) return;
+            if ((sender as FrameworkElement)?.Tag is not BangumiBook book) return;
 
             ViewModel.SelectedBangumiBook = book;
             if (string.IsNullOrWhiteSpace(TitleTextBox.Text))
@@ -195,7 +195,7 @@ namespace hanabimanga.Pages
 
         private void ComicResult_Click(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is ComicListItem comic)
+            if ((sender as FrameworkElement)?.Tag is ComicListItem comic)
             {
                 ViewModel.SelectedComic = comic;
             }

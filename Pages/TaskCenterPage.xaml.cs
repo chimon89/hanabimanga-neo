@@ -1,4 +1,5 @@
 using hanabimanga.ViewModels;
+using hanabimanga.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -17,7 +18,30 @@ namespace hanabimanga.Pages
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+            if (!SupabaseService.Instance.IsSignedIn)
+            {
+                RedirectToLogin();
+                return;
+            }
+
             await ViewModel.LoadAsync();
+        }
+
+        private void RedirectToLogin()
+        {
+            if (App.MainWindow is hanabimanga.MainWindow mainWindow)
+            {
+                mainWindow.ShowAccountFlyout();
+            }
+
+            if (Frame.CanGoBack)
+            {
+                Frame.GoBack();
+            }
+            else
+            {
+                Frame.Navigate(typeof(HomePage));
+            }
         }
 
         private async void RefreshButton_Click(object sender, RoutedEventArgs e)

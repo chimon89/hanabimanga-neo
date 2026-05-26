@@ -455,6 +455,13 @@ namespace hanabimanga.Services
             settings.ReaderViewMode = settings.ReaderViewMode?.Trim().ToLowerInvariant() == "waterfall"
                 ? "waterfall"
                 : "page";
+            settings.ApiEndpoint = settings.ApiEndpoint?.Trim().ToLowerInvariant() switch
+            {
+                "direct" => "direct",
+                "accelerated" => "accelerated",
+                _ => "auto",
+            };
+            settings.AccentColor = ThemeColorService.Instance.Resolve(settings.AccentColor?.Trim()).Id;
         }
 
         private static LocalAppSettings CloneSettings(LocalAppSettings settings) => new()
@@ -464,6 +471,8 @@ namespace hanabimanga.Services
             PreloadPageCount = settings.PreloadPageCount,
             ReaderViewMode = settings.ReaderViewMode,
             HasSeenReaderZoomGuide = settings.HasSeenReaderZoomGuide,
+            ApiEndpoint = settings.ApiEndpoint,
+            AccentColor = settings.AccentColor,
         };
 
         private static DownloadTaskItem CloneDownload(DownloadTaskItem item) => new()

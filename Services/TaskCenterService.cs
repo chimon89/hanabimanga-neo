@@ -39,6 +39,10 @@ namespace hanabimanga.Services
                     return remoteDocument;
                 }
             }
+            catch (InvalidOperationException ex) when (IsAuthenticationRequired(ex))
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[task-center] using local fallback: {ex.Message}");
@@ -51,41 +55,11 @@ namespace hanabimanga.Services
             }
         }
 
-        public Task<TaskCenterDocument> ClaimDailySignInAsync()
+        public async Task<TaskCenterDocument> ClaimDailySignInAsync()
         {
-            lock (_syncRoot)
-            {
-                if (_document.HasSignedInToday)
-                {
-                    return Task.FromResult(Clone(_document));
-                }
-
-                const int reward = 20;
-                _document.HasSignedInToday = true;
-                _document.Points += reward;
-                _document.TodayPoints += reward;
-                _document.EarnedPoints += reward;
-                _document.SignInStreak = Math.Max(1, _document.SignInStreak + 1);
-
-                var today = _document.SignInDays.FirstOrDefault(day => day.IsToday);
-                if (today != null)
-                {
-                    today.IsChecked = true;
-                    today.Points = reward;
-                }
-
-                _document.Transactions.Insert(0, new PointTransaction
-                {
-                    Id = $"signin-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
-                    Title = "每日签到",
-                    TimeText = "刚刚",
-                    Amount = reward,
-                    Type = "income",
-                });
-
-                RefreshStoreAffordability(_document);
-                return Task.FromResult(Clone(_document));
-            }
+            await SupabaseService.Instance.ClaimCheckinRewardAsync();
+            // 签到结果与积分以服务器为准,领取后重新拉取完整的任务中心文档。
+            return await GetTaskCenterCoreAsync();
         }
 
         public Task<TaskCenterDocument> RedeemAsync(string itemId)
@@ -297,6 +271,9 @@ namespace hanabimanga.Services
             RefreshStoreAffordability(document);
             return document;
         }
+
+        private static bool IsAuthenticationRequired(Exception ex)
+            => ex.Message.StartsWith("请先登录", StringComparison.Ordinal);
 
         private static void RefreshStoreAffordability(TaskCenterDocument document)
         {

@@ -45,6 +45,13 @@ namespace hanabimanga.ViewModels
             await LoadByIndexAsync(SelectedIndex);
         }
 
+        // 登录 / 退出后调用:清空懒加载标记,重新加载当前页,其余页切换时再刷新。
+        public async Task RefreshForAuthChangeAsync()
+        {
+            for (var i = 0; i < _loaded.Length; i++) _loaded[i] = false;
+            await EnsureLoadedAsync(SelectedIndex);
+        }
+
         private Task LoadByIndexAsync(int index) => index switch
         {
             0 => History.LoadAsync(),

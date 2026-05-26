@@ -1,4 +1,5 @@
 using hanabimanga.Models;
+using hanabimanga.Services;
 using hanabimanga.ViewModels;
 using System.Globalization;
 using Microsoft.UI.Xaml;
@@ -15,6 +16,24 @@ namespace hanabimanga.Pages
         {
             InitializeComponent();
             BookshelfSelector.SelectedItem = HistorySelectorItem;
+            Loaded += BookshelfPage_Loaded;
+            Unloaded += BookshelfPage_Unloaded;
+        }
+
+        private void BookshelfPage_Loaded(object sender, RoutedEventArgs e)
+        {
+            SupabaseService.Instance.AuthStateChanged += SupabaseService_AuthStateChanged;
+        }
+
+        private void BookshelfPage_Unloaded(object sender, RoutedEventArgs e)
+        {
+            SupabaseService.Instance.AuthStateChanged -= SupabaseService_AuthStateChanged;
+        }
+
+        // 登录 / 退出后,事件可能来自后台线程,切回 UI 线程刷新书架数据。
+        private void SupabaseService_AuthStateChanged(object? sender, System.EventArgs e)
+        {
+            DispatcherQueue.TryEnqueue(async () => await ViewModel.RefreshForAuthChangeAsync());
         }
 
         protected override async void OnNavigatedTo(NavigationEventArgs e)

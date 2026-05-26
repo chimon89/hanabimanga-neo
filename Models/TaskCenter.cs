@@ -134,7 +134,7 @@ namespace hanabimanga.Models
     internal sealed class RawTaskDefinitionRecord
     {
         [JsonProperty("id")]
-        public long Id { get; set; }
+        public string? Id { get; set; }
 
         [JsonProperty("title")]
         public string? Title { get; set; }
@@ -167,7 +167,7 @@ namespace hanabimanga.Models
         public string? UserId { get; set; }
 
         [JsonProperty("task_id")]
-        public long TaskId { get; set; }
+        public string? TaskId { get; set; }
 
         [JsonProperty("period_key")]
         public string? PeriodKey { get; set; }
@@ -207,6 +207,39 @@ namespace hanabimanga.Models
 
         [JsonProperty("type")]
         public string? Type { get; set; }
+    }
+
+    internal sealed class RawCheckinWeekPreview
+    {
+        [JsonProperty("days")]
+        public List<RawCheckinDay>? Days { get; set; }
+
+        [JsonProperty("today")]
+        public string? Today { get; set; }
+
+        [JsonProperty("week_start")]
+        public string? WeekStart { get; set; }
+
+        [JsonProperty("week_end")]
+        public string? WeekEnd { get; set; }
+    }
+
+    internal sealed class RawCheckinDay
+    {
+        [JsonProperty("date")]
+        public string? Date { get; set; }
+
+        [JsonProperty("state")]
+        public string? State { get; set; }
+
+        [JsonProperty("points")]
+        public int Points { get; set; }
+
+        [JsonProperty("streak")]
+        public int Streak { get; set; }
+
+        [JsonProperty("day_of_week")]
+        public int DayOfWeek { get; set; }
     }
 
     internal sealed class RawChapterViewLogRecord

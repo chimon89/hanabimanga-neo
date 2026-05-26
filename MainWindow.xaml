@@ -534,58 +534,6 @@
                                     Grid.Row="3"
                                     Padding="6,0,6,0">
                                     <StackPanel Spacing="2">
-                                        <Button
-                                            x:Name="ViewMyProfileButton"
-                                            MinHeight="40"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="14,8"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            CornerRadius="6"
-                                            IsEnabled="False"
-                                            Click="ViewMyProfileButton_Click"
-                                            Content="我的主页" />
-
-                                        <Button
-                                            x:Name="TaskCenterButton"
-                                            MinHeight="40"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="14,8"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            CornerRadius="6"
-                                            IsEnabled="False"
-                                            Click="TaskCenterButton_Click"
-                                            Content="任务中心" />
-
-                                        <Button
-                                            x:Name="FeedbackButton"
-                                            MinHeight="40"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="14,8"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            CornerRadius="6"
-                                            IsEnabled="False"
-                                            Click="FeedbackButton_Click"
-                                            Content="资源与反馈" />
-
-                                        <Button
-                                            x:Name="ViewAccountButton"
-                                            MinHeight="40"
-                                            HorizontalAlignment="Stretch"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="14,8"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            CornerRadius="6"
-                                            IsEnabled="False"
-                                            Click="ViewAccountButton_Click"
-                                            Content="用户设置" />
-
                                         <StackPanel
                                             x:Name="SignedOutAccountActionsPanel"
                                             Spacing="2">
@@ -625,6 +573,54 @@
                                             x:Name="SignedInAccountActionsPanel"
                                             Spacing="2"
                                             Visibility="Collapsed">
+                                            <Button
+                                                x:Name="ViewMyProfileButton"
+                                                MinHeight="40"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Padding="14,8"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                CornerRadius="6"
+                                                Click="ViewMyProfileButton_Click"
+                                                Content="我的主页" />
+
+                                            <Button
+                                                x:Name="TaskCenterButton"
+                                                MinHeight="40"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Padding="14,8"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                CornerRadius="6"
+                                                Click="TaskCenterButton_Click"
+                                                Content="任务中心" />
+
+                                            <Button
+                                                x:Name="FeedbackButton"
+                                                MinHeight="40"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Padding="14,8"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                CornerRadius="6"
+                                                Click="FeedbackButton_Click"
+                                                Content="资源与反馈" />
+
+                                            <Button
+                                                x:Name="ViewAccountButton"
+                                                MinHeight="40"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Padding="14,8"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                CornerRadius="6"
+                                                Click="ViewAccountButton_Click"
+                                                Content="用户设置" />
+
                                             <Button
                                                 x:Name="SignOutMenuButton"
                                                 MinHeight="40"
