@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Page
     x:Class="hanabimanga.Pages.AppSettingsPage"
+    x:Name="SettingsPageRoot"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="using:hanabimanga.Converters"
@@ -171,7 +172,7 @@
                         BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource LayerFillColorDefaultBrush}">
-                        <Grid RowSpacing="14">
+                        <Grid RowSpacing="10">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -193,7 +194,7 @@
                                 ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="1">
                                     <TextBlock
@@ -226,7 +227,7 @@
                         BorderThickness="1"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         Background="{ThemeResource LayerFillColorDefaultBrush}">
-                        <Grid RowSpacing="14">
+                        <Grid RowSpacing="4">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
@@ -235,10 +236,10 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <Grid ColumnSpacing="16">
+                            <Grid MinHeight="42" ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2">
                                     <TextBlock
@@ -252,7 +253,9 @@
                                 </StackPanel>
                                 <Button
                                     Grid.Column="1"
-                                    Padding="12,6"
+                                    Padding="12,4"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
                                     Click="ClearCacheButton_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon Glyph="&#xE74D;" FontSize="13" />
@@ -263,10 +266,11 @@
 
                             <Grid
                                 Grid.Row="1"
+                                MinHeight="42"
                                 ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock
                                     Text="阅读器模式"
@@ -274,7 +278,8 @@
                                     FontWeight="SemiBold" />
                                 <ComboBox
                                     Grid.Column="1"
-                                    Width="168"
+                                    Width="200"
+                                    VerticalAlignment="Center"
                                     SelectedIndex="{x:Bind ViewModel.ReaderViewModeSelectedIndex, Mode=OneWay}"
                                     SelectionChanged="ReaderViewModeComboBox_SelectionChanged">
                                     <ComboBoxItem Content="翻页模式" />
@@ -284,72 +289,110 @@
 
                             <Grid
                                 Grid.Row="2"
+                                MinHeight="42"
                                 ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock
                                     Text="缓存图片"
                                     VerticalAlignment="Center"
                                     FontWeight="SemiBold" />
-                                <ToggleSwitch
+                                <Grid
                                     Grid.Column="1"
-                                    IsOn="{x:Bind ViewModel.EnableReaderCache, Mode=OneWay}"
-                                    Toggled="ReaderCacheToggle_Toggled"
-                                    OnContent="开启"
-                                    OffContent="关闭" />
+                                    Width="104"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        Text="{x:Bind ViewModel.ReaderCacheStateText, Mode=OneWay}"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <ToggleSwitch
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        IsOn="{x:Bind ViewModel.EnableReaderCache, Mode=OneWay}"
+                                        Toggled="ReaderCacheToggle_Toggled" />
+                                </Grid>
                             </Grid>
 
                             <Grid
                                 Grid.Row="3"
+                                MinHeight="42"
                                 ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
+                                <Grid.Visibility>
+                                    <Binding
+                                        Path="ViewModel.ShowReaderPreloadSettings"
+                                        ElementName="SettingsPageRoot"
+                                        Converter="{StaticResource BoolToVisibility}" />
+                                </Grid.Visibility>
                                 <TextBlock
                                     Text="预载页面"
                                     VerticalAlignment="Center"
                                     FontWeight="SemiBold" />
-                                <ToggleSwitch
+                                <Grid
                                     Grid.Column="1"
-                                    IsEnabled="{x:Bind ViewModel.CanUsePreload, Mode=OneWay}"
-                                    IsOn="{x:Bind ViewModel.EnableReaderPreload, Mode=OneWay}"
-                                    Toggled="ReaderPreloadToggle_Toggled"
-                                    OnContent="开启"
-                                    OffContent="关闭" />
+                                    Width="104"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        Text="{x:Bind ViewModel.ReaderPreloadStateText, Mode=OneWay}"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <ToggleSwitch
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{x:Bind ViewModel.CanUsePreload, Mode=OneWay}"
+                                        IsOn="{x:Bind ViewModel.EnableReaderPreload, Mode=OneWay}"
+                                        Toggled="ReaderPreloadToggle_Toggled" />
+                                </Grid>
                             </Grid>
 
                             <Grid
                                 Grid.Row="4"
+                                MinHeight="42"
                                 ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="260" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
+                                <Grid.Visibility>
+                                    <Binding
+                                        Path="ViewModel.ShowPreloadPageCount"
+                                        ElementName="SettingsPageRoot"
+                                        Converter="{StaticResource BoolToVisibility}" />
+                                </Grid.Visibility>
                                 <TextBlock
                                     Text="预载页数"
                                     VerticalAlignment="Center"
                                     FontWeight="SemiBold" />
-                                <Slider
+                                <ComboBox
                                     Grid.Column="1"
-                                    Minimum="1"
-                                    Maximum="8"
-                                    Background="{ThemeResource ControlFillColorTransparentBrush}"
-                                    Foreground="{ThemeResource AccentFillColorDefaultBrush}"
-                                    StepFrequency="1"
-                                    SmallChange="1"
-                                    LargeChange="1"
-                                    Value="{x:Bind ViewModel.PreloadPageCountValue, Mode=OneWay}"
-                                    ValueChanged="PreloadPageCountSlider_ValueChanged" />
-                                <TextBlock
-                                    Grid.Column="2"
-                                    MinWidth="40"
-                                    Text="{x:Bind ViewModel.PreloadPageCountText, Mode=OneWay}"
+                                    Width="200"
                                     VerticalAlignment="Center"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    IsEnabled="{x:Bind ViewModel.CanUsePreload, Mode=OneWay}"
+                                    SelectedIndex="{x:Bind ViewModel.PreloadPageCountSelectedIndex, Mode=OneWay}"
+                                    SelectionChanged="PreloadPageCountComboBox_SelectionChanged">
+                                    <ComboBoxItem Content="6 页" />
+                                    <ComboBoxItem Content="7 页" />
+                                    <ComboBoxItem Content="8 页" />
+                                    <ComboBoxItem Content="9 页" />
+                                    <ComboBoxItem Content="10 页" />
+                                </ComboBox>
                             </Grid>
                         </Grid>
                     </Border>

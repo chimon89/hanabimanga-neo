@@ -9,7 +9,7 @@
   <Identity
     Name="ChimonTechnology.63710C3899763"
     Publisher="CN=D9BB8545-536E-40C5-9B08-037E3E6CD856"
-    Version="0.1.2.2" />
+    Version="0.1.4.0" />
 
   <mp:PhoneIdentity PhoneProductId="61d00ca6-862a-4989-8e5e-a1dee382dd28" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

@@ -451,7 +451,7 @@ namespace hanabimanga.Services
 
         private static void NormalizeSettings(LocalAppSettings settings)
         {
-            settings.PreloadPageCount = Math.Clamp(settings.PreloadPageCount, 1, 8);
+            settings.PreloadPageCount = Math.Clamp(settings.PreloadPageCount, 6, 10);
             settings.ReaderViewMode = settings.ReaderViewMode?.Trim().ToLowerInvariant() == "waterfall"
                 ? "waterfall"
                 : "page";

@@ -4,7 +4,6 @@ using Microsoft.Windows.AppLifecycle;
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -23,21 +22,47 @@ namespace hanabimanga
         private const string ProtocolScheme = "hanabimanga";
         private const string SingleInstanceKey = "hanabimanga-main";
         private const string SingleInstanceMutexName = @"Local\hanabimanga-single-instance";
-        private const string SingleInstancePipeName = "hanabimanga-single-instance-pipe";
         private const string SingleInstanceLockFileName = "hanabimanga.instance.lock";
         private const string ActivationInboxDirectoryName = "activation-inbox";
 
-        // MSIX 下 LocalApplicationData 通常映射到 ...\Packages\<PFN>\LocalCache\Local,
-        // 这是 packaged app 100% 能写的位置;非 MSIX 跑时就是真正的 %LOCALAPPDATA%。
-        private static readonly string TraceFile = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "hanabi-trace.log");
+        // MSIX 下 LocalApplicationData 实际返回的是真实 %LOCALAPPDATA%(不是包容器),
+        // 沙箱可能拒绝写入。优先用 Windows.Storage.ApplicationData.Current.LocalFolder.Path,
+        // 拿不到再回退到 LocalApplicationData,最后回退到 TEMP。结果缓存,避免反复探测。
+        private static readonly string TraceFile = ResolveTraceFile();
+
+        private static string ResolveTraceFile()
+        {
+            const string fileName = "hanabi-trace.log";
+            try
+            {
+                var local = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
+                if (!string.IsNullOrWhiteSpace(local)) return Path.Combine(local, fileName);
+            }
+            catch
+            {
+            }
+            try
+            {
+                var fallback = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (!string.IsNullOrWhiteSpace(fallback)) return Path.Combine(fallback, fileName);
+            }
+            catch
+            {
+            }
+            return Path.Combine(Path.GetTempPath(), fileName);
+        }
 
         private static void Trace(string msg)
         {
-            // 故意不 catch:让任何写失败崩到 EventLog,以暴露 trace 路径问题。
-            File.AppendAllText(TraceFile,
-                $"[{DateTime.Now:HH:mm:ss.fff}] pid={Environment.ProcessId} {msg}{Environment.NewLine}");
+            try
+            {
+                File.AppendAllText(TraceFile,
+                    $"[{DateTime.Now:HH:mm:ss.fff}] pid={Environment.ProcessId} {msg}{Environment.NewLine}");
+            }
+            catch
+            {
+                // 沙箱拒写时悄悄忽略,避免诊断本身把进程拉崩。
+            }
         }
 
         // 把 key holder 实例保活在静态字段:否则 DecideRedirection 返回后
@@ -45,7 +70,6 @@ namespace hanabimanga
         // 让后续来访的协议激活进程看不到主实例,各自又当 key holder 开新窗口。
         private static AppInstance? _mainAppInstance;
         private static Mutex? _singleInstanceMutex;
-        private static CancellationTokenSource? _pipeServerCts;
         private static FileStream? _singleInstanceLockStream;
         private static CancellationTokenSource? _activationInboxCts;
         private static string? _singleInstanceDirectory;
@@ -53,7 +77,7 @@ namespace hanabimanga
         [STAThread]
         private static int Main(string[] args)
         {
-            Trace($"Main start, args=[{string.Join(",", args)}]");
+            Trace($"Main start, args=[{string.Join(",", args)}], TraceFile={TraceFile}");
             WinRT.ComWrappersSupport.InitializeComWrappers();
             RegisterProtocolForUnpackagedRuns();
 
@@ -108,7 +132,6 @@ namespace hanabimanga
                 _ = new App();
             });
             Trace("Application.Start returned");
-            _pipeServerCts?.Cancel();
             _activationInboxCts?.Cancel();
             _singleInstanceLockStream?.Dispose();
             _singleInstanceMutex?.Dispose();
@@ -158,14 +181,13 @@ namespace hanabimanga
                 _singleInstanceMutex = new Mutex(true, SingleInstanceMutexName, out var isFirstMutexOwner);
                 Trace($"Mutex '{SingleInstanceMutexName}' IsFirst={isFirstMutexOwner}");
                 StartActivationInboxPoller();
-                StartPipeServer();
                 return true;
             }
 
             Trace("File lock IsFirst=False");
-            if (!WriteActivationPayload(payload) && !ForwardActivationToExistingInstance(payload))
+            if (!WriteActivationPayload(payload))
             {
-                Trace("ForwardActivationToExistingInstance failed; existing file lock owner still suppresses new UI");
+                Trace("WriteActivationPayload failed; existing file lock owner still suppresses new UI");
             }
 
             return false;
@@ -335,85 +357,6 @@ namespace hanabimanga
             {
                 Trace($"DrainActivationInbox failed: {ex.GetType().Name}: {ex.Message}");
             }
-        }
-
-        private static void StartPipeServer()
-        {
-            _pipeServerCts = new CancellationTokenSource();
-            var token = _pipeServerCts.Token;
-
-            _ = Task.Run(async () =>
-            {
-                while (!token.IsCancellationRequested)
-                {
-                    try
-                    {
-                        using var server = new NamedPipeServerStream(
-                            SingleInstancePipeName,
-                            PipeDirection.In,
-                            1,
-                            PipeTransmissionMode.Byte,
-                            PipeOptions.Asynchronous);
-
-                        await server.WaitForConnectionAsync(token);
-                        using var reader = new StreamReader(server, Encoding.UTF8);
-                        var payload = await reader.ReadToEndAsync();
-                        Trace($"Pipe received payload length={payload.Length}");
-                        App.HandleForwardedActivation(payload);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        Trace($"Pipe server error: {ex.GetType().Name}: {ex.Message}");
-                        await Task.Delay(250, token).ContinueWith(_ => { }, TaskScheduler.Default);
-                    }
-                }
-            }, token);
-        }
-
-        private static bool ForwardActivationToExistingInstance(string payload)
-        {
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-            while (DateTime.UtcNow < deadline)
-            {
-                try
-                {
-                    using var client = new NamedPipeClientStream(
-                        ".",
-                        SingleInstancePipeName,
-                        PipeDirection.Out,
-                        PipeOptions.None);
-                    client.Connect(250);
-
-                    using var writer = new StreamWriter(client, new UTF8Encoding(false))
-                    {
-                        AutoFlush = true,
-                    };
-                    writer.Write(payload);
-                    Trace($"Forwarded payload length={payload.Length}");
-                    return true;
-                }
-                catch (TimeoutException)
-                {
-                    Thread.Sleep(100);
-                }
-                catch (IOException ex)
-                {
-                    Trace($"Pipe connect/write failed: {ex.GetType().Name}: {ex.Message}");
-                    Thread.Sleep(100);
-                }
-                catch (Exception ex)
-                {
-                    Trace($"ForwardActivationToExistingInstance error: {ex.GetType().Name}: {ex.Message}");
-                    return false;
-                }
-            }
-
-            Trace("ForwardActivationToExistingInstance timed out");
-            return false;
         }
 
         private static void RegisterProtocolForUnpackagedRuns()

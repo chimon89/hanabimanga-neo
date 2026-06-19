@@ -9,7 +9,7 @@ namespace hanabimanga.Models
     {
         public bool EnableReaderCache { get; set; } = true;
         public bool EnableReaderPreload { get; set; } = true;
-        public int PreloadPageCount { get; set; } = 3;
+        public int PreloadPageCount { get; set; } = 6;
         public string ReaderViewMode { get; set; } = "page";
         public bool HasSeenReaderZoomGuide { get; set; }
 

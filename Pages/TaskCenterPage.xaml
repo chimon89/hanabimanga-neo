@@ -128,7 +128,7 @@
                                     FontSize="15"
                                     Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                 <TextBlock
-                                    Text="积分商城"
+                                    Text="会员商城"
                                     Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                             </StackPanel>
                         </Button>
@@ -247,7 +247,7 @@
                                     BorderThickness="1"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                                    <Grid ColumnSpacing="14">
+                                    <Grid ColumnSpacing="14" MinHeight="56" VerticalAlignment="Center">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="52" />
                                             <ColumnDefinition Width="*" />
@@ -258,6 +258,7 @@
                                             Width="48"
                                             Height="48"
                                             CornerRadius="10"
+                                            VerticalAlignment="Center"
                                             Background="{ThemeResource AccentFillColorDefaultBrush}">
                                             <FontIcon
                                                 Glyph="{x:Bind IconGlyph}"
@@ -337,7 +338,7 @@
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center" />
                                         </Border>
-                                        <StackPanel Grid.Column="1" Spacing="4">
+                                        <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
                                             <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" />
                                             <TextBlock Text="{x:Bind Description}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </StackPanel>
@@ -367,41 +368,55 @@
                         </ItemsRepeater.Layout>
                         <ItemsRepeater.ItemTemplate>
                             <DataTemplate x:DataType="models:TaskCenterTaskItem">
-                                <Border
-                                    Padding="14"
-                                    CornerRadius="10"
-                                    BorderThickness="1"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                                    <Grid ColumnSpacing="14">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="52" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border
-                                            Width="48"
-                                            Height="48"
-                                            CornerRadius="10"
-                                            Background="{ThemeResource AccentFillColorDefaultBrush}">
-                                            <FontIcon
-                                                Glyph="{x:Bind IconGlyph}"
-                                                FontSize="23"
-                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center" />
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Spacing="4">
-                                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" />
-                                            <TextBlock Text="{x:Bind Description}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        </StackPanel>
-                                        <TextBlock
-                                            Grid.Column="2"
-                                            Text="{x:Bind StatusText}"
-                                            VerticalAlignment="Center"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    </Grid>
-                                </Border>
+                                <Button
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Tag="{x:Bind Id}"
+                                    Click="LongTermTaskButton_Click">
+                                    <Border
+                                        Padding="14"
+                                        CornerRadius="10"
+                                        BorderThickness="1"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                        <Grid ColumnSpacing="14" MinHeight="56" VerticalAlignment="Center">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="52" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border
+                                                Width="48"
+                                                Height="48"
+                                                CornerRadius="10"
+                                                VerticalAlignment="Center"
+                                                Background="{ThemeResource AccentFillColorDefaultBrush}">
+                                                <FontIcon
+                                                    Glyph="{x:Bind IconGlyph}"
+                                                    FontSize="23"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{x:Bind Description}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                <TextBlock
+                                                    Text="{x:Bind StatusText}"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <FontIcon
+                                                    Glyph="&#xE76C;"
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Button>
                             </DataTemplate>
                         </ItemsRepeater.ItemTemplate>
                     </ItemsRepeater>

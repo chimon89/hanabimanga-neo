@@ -19,6 +19,7 @@ namespace hanabimanga.ViewModels
         private bool _isWorking;
         private string? _errorMessage;
         private string? _feedbackMessage;
+        private PaymentOrder? _latestPaymentOrder;
 
         public ObservableCollection<TaskCenterSignInDay> SignInDays { get; } = new();
         public ObservableCollection<TaskCenterTaskItem> DailyTasks { get; } = new();
@@ -28,6 +29,7 @@ namespace hanabimanga.ViewModels
         public ObservableCollection<PointStoreItem> VirtualStoreItems { get; } = new();
         public ObservableCollection<PointStoreItem> PhysicalStoreItems { get; } = new();
         public ObservableCollection<ExchangeRecord> ExchangeRecords { get; } = new();
+        public ObservableCollection<InviteRewardRecord> InviteRecords { get; } = new();
 
         public bool IsLoading
         {
@@ -82,8 +84,20 @@ namespace hanabimanga.ViewModels
         }
 
         public bool HasFeedback => !string.IsNullOrWhiteSpace(FeedbackMessage);
+        public PaymentOrder? LatestPaymentOrder
+        {
+            get => _latestPaymentOrder;
+            private set
+            {
+                if (_latestPaymentOrder == value) return;
+                _latestPaymentOrder = value;
+                OnPropertyChanged();
+            }
+        }
 
         public int Points => _document.Points;
+        public bool IsPermanentVip => _document.IsPermanentVip;
+        public bool CanPurchaseMembership => !IsPermanentVip;
         public string TodayPointsText => _document.TodayPointsText;
         public string EarnedPointsText => _document.EarnedPointsText;
         public string SpentPointsText => _document.SpentPointsText;
@@ -98,6 +112,20 @@ namespace hanabimanga.ViewModels
         public bool IsTransactionsEmpty => !HasTransactions;
         public bool HasExchangeRecords => ExchangeRecords.Count > 0;
         public bool IsExchangeRecordsEmpty => !HasExchangeRecords;
+        public bool HasInviteRecords => InviteRecords.Count > 0;
+        public bool IsInviteRecordsEmpty => !HasInviteRecords;
+        public string InviteCode => _document.InviteCode;
+        public bool HasInviteCode => !string.IsNullOrWhiteSpace(InviteCode);
+        public string InviteCodeText => HasInviteCode ? InviteCode : "暂无邀请码";
+        public string InviteShareText => $"我在花火漫画等你，注册时填写邀请码 {InviteCode} 即可绑定邀请关系。";
+        public int InvitedCount => _document.InvitedCount;
+        public int SuccessfulInviteCount => _document.SuccessfulInviteCount;
+        public int PendingCheckinInviteCount => _document.PendingCheckinInviteCount;
+        public int InvitePoints => _document.InvitePoints;
+        public string InvitedCountText => InvitedCount.ToString();
+        public string SuccessfulInviteCountText => SuccessfulInviteCount.ToString();
+        public string PendingCheckinInviteCountText => PendingCheckinInviteCount.ToString();
+        public string InvitePointsText => $"+{InvitePoints}";
 
         public async Task LoadAsync()
         {
@@ -106,7 +134,7 @@ namespace hanabimanga.ViewModels
 
             try
             {
-                UpdateFromDocument(await TaskCenterService.Instance.GetTaskCenterAsync());
+                UpdateFromDocument(await TaskCenterService.Instance.GetTaskCenterAsync(preferCached: true));
             }
             catch (Exception ex)
             {
@@ -182,6 +210,60 @@ namespace hanabimanga.ViewModels
             }
         }
 
+        public async Task<PaymentOrder?> CreatePaymentOrderAsync(string productId)
+        {
+            if (string.IsNullOrWhiteSpace(productId)) return null;
+
+            IsWorking = true;
+            ErrorMessage = null;
+
+            try
+            {
+                LatestPaymentOrder = await SupabaseService.Instance.CreatePaymentOrderAsync(productId);
+                FeedbackMessage = "订单已创建";
+                return LatestPaymentOrder;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+                return null;
+            }
+            finally
+            {
+                IsWorking = false;
+            }
+        }
+
+        public async Task<PaymentOrder?> SyncPaymentOrderAsync(PaymentOrder order)
+        {
+            IsWorking = true;
+            ErrorMessage = null;
+
+            try
+            {
+                LatestPaymentOrder = await SupabaseService.Instance.QueryPaymentOrderAsync(
+                    order.Id,
+                    order.TradeNo,
+                    syncHypay: true);
+                FeedbackMessage = LatestPaymentOrder.IsPaid ? "支付已确认" : "订单仍在待支付";
+                if (LatestPaymentOrder.IsPaid)
+                {
+                    UpdateFromDocument(await TaskCenterService.Instance.GetTaskCenterAsync());
+                }
+
+                return LatestPaymentOrder;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+                return null;
+            }
+            finally
+            {
+                IsWorking = false;
+            }
+        }
+
         public void SetTransactionFilter(string filter)
         {
             _transactionFilter = string.IsNullOrWhiteSpace(filter) ? "all" : filter;
@@ -200,6 +282,7 @@ namespace hanabimanga.ViewModels
             Replace(VirtualStoreItems, document.StoreItems.Where(item => item.IsVirtual));
             Replace(PhysicalStoreItems, document.StoreItems.Where(item => item.IsPhysical));
             Replace(ExchangeRecords, document.ExchangeRecords);
+            Replace(InviteRecords, document.InviteRecords);
             RefreshTransactions();
 
             RaiseDocumentProperties();
@@ -222,6 +305,8 @@ namespace hanabimanga.ViewModels
         private void RaiseDocumentProperties()
         {
             OnPropertyChanged(nameof(Points));
+            OnPropertyChanged(nameof(IsPermanentVip));
+            OnPropertyChanged(nameof(CanPurchaseMembership));
             OnPropertyChanged(nameof(TodayPointsText));
             OnPropertyChanged(nameof(EarnedPointsText));
             OnPropertyChanged(nameof(SpentPointsText));
@@ -234,6 +319,20 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(LongTermTaskSummary));
             OnPropertyChanged(nameof(HasExchangeRecords));
             OnPropertyChanged(nameof(IsExchangeRecordsEmpty));
+            OnPropertyChanged(nameof(HasInviteRecords));
+            OnPropertyChanged(nameof(IsInviteRecordsEmpty));
+            OnPropertyChanged(nameof(InviteCode));
+            OnPropertyChanged(nameof(HasInviteCode));
+            OnPropertyChanged(nameof(InviteCodeText));
+            OnPropertyChanged(nameof(InviteShareText));
+            OnPropertyChanged(nameof(InvitedCount));
+            OnPropertyChanged(nameof(SuccessfulInviteCount));
+            OnPropertyChanged(nameof(PendingCheckinInviteCount));
+            OnPropertyChanged(nameof(InvitePoints));
+            OnPropertyChanged(nameof(InvitedCountText));
+            OnPropertyChanged(nameof(SuccessfulInviteCountText));
+            OnPropertyChanged(nameof(PendingCheckinInviteCountText));
+            OnPropertyChanged(nameof(InvitePointsText));
         }
 
         private static void Replace<T>(ObservableCollection<T> collection, IEnumerable<T> items)

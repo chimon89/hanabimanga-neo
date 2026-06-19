@@ -20,6 +20,7 @@ namespace hanabimanga.Models
         public string? BannerUrl { get; set; }
         public DateTime? CreatedAt { get; set; }
         public bool IsSelf { get; set; }
+        public bool IsEmailVerified { get; set; }
         public int CommentCount { get; set; }
         public int FavoriteCount { get; set; }
         public int LikeCount { get; set; }
@@ -112,6 +113,9 @@ namespace hanabimanga.Models
 
         [JsonProperty("banner_url")]
         public string? BannerUrl { get; set; }
+
+        [JsonProperty("email_verified_at")]
+        public DateTime? EmailVerifiedAt { get; set; }
 
         [JsonProperty("created_at")]
         public DateTime? CreatedAt { get; set; }

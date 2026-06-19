@@ -52,7 +52,7 @@
                     </Button>
                     <TextBlock
                         Grid.Column="1"
-                        Text="积分商城"
+                        Text="会员商城"
                         FontSize="26"
                         FontWeight="SemiBold"
                         VerticalAlignment="Center" />
@@ -88,7 +88,7 @@
                                 Foreground="{ThemeResource AccentFillColorDefaultBrush}"
                                 FontSize="18" />
                             <TextBlock
-                                Text="可用积分"
+                                Text="可用积分 / 会员权益"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                         </StackPanel>
                         <TextBlock
@@ -100,11 +100,55 @@
                 </Border>
 
                 <StackPanel Grid.Row="3" Spacing="10">
+                    <StackPanel
+                        Spacing="8"
+                        Visibility="{x:Bind ViewModel.IsPermanentVip, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock
+                            Text="VIP 会员"
+                            FontSize="18"
+                            FontWeight="SemiBold" />
+                        <Border
+                            Padding="16"
+                            CornerRadius="10"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="58" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border
+                                    Width="54"
+                                    Height="54"
+                                    CornerRadius="10"
+                                    Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                                    <FontIcon
+                                        Glyph="&#xE7BF;"
+                                        FontSize="25"
+                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="永久会员" FontWeight="SemiBold" />
+                                    <TextBlock
+                                        Text="会员权益已永久生效"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
                     <TextBlock
-                        Text="虚拟奖励"
+                        Text="VIP 会员"
                         FontSize="18"
-                        FontWeight="SemiBold" />
-                    <ItemsRepeater ItemsSource="{x:Bind ViewModel.VirtualStoreItems, Mode=OneWay}">
+                        FontWeight="SemiBold"
+                        Visibility="{x:Bind ViewModel.CanPurchaseMembership, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                    <ItemsRepeater
+                        ItemsSource="{x:Bind ViewModel.VirtualStoreItems, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.CanPurchaseMembership, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                         <ItemsRepeater.Layout>
                             <StackLayout Orientation="Vertical" Spacing="10" />
                         </ItemsRepeater.Layout>
@@ -143,7 +187,7 @@
                                                 MaxLines="1"
                                                 TextTrimming="CharacterEllipsis" />
                                             <TextBlock
-                                                Text="{x:Bind PointsText}"
+                                                Text="{x:Bind PriceText}"
                                                 Foreground="{ThemeResource AccentFillColorDefaultBrush}"
                                                 FontWeight="SemiBold" />
                                         </StackPanel>

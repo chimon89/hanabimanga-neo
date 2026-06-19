@@ -96,6 +96,7 @@ namespace hanabimanga
         {
             await App.SupabaseInitialization;
             UpdateAccountFooter();
+            WarmUpTaskCenterIfSignedIn();
             await RefreshContinueReadingBarAsync();
         }
 
@@ -107,6 +108,7 @@ namespace hanabimanga
             var windowHandle = WindowNative.GetWindowHandle(this);
             var windowId = Win32Interop.GetWindowIdFromWindow(windowHandle);
             _appWindow = AppWindow.GetFromWindowId(windowId);
+            WindowIconService.ApplyTo(this, _appWindow);
 
             _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
             ApplyCaptionButtonColors();
@@ -284,6 +286,7 @@ namespace hanabimanga
                 else if (RootFrame.Content is TaskCenterPage ||
                     RootFrame.Content is PointsDetailPage ||
                     RootFrame.Content is PointsStorePage ||
+                    RootFrame.Content is InvitePage ||
                     RootFrame.Content is ExchangeHistoryPage)
                 {
                     NavigationRoot.SelectedItem = TaskCenterNavigationItem;
@@ -340,6 +343,7 @@ namespace hanabimanga
                 case "task-center" when RootFrame.Content is not TaskCenterPage &&
                     RootFrame.Content is not PointsDetailPage &&
                     RootFrame.Content is not PointsStorePage &&
+                    RootFrame.Content is not InvitePage &&
                     RootFrame.Content is not ExchangeHistoryPage:
                     RootFrame.Navigate(typeof(TaskCenterPage));
                     break;
@@ -725,6 +729,16 @@ namespace hanabimanga
                 Header = "密码",
                 PlaceholderText = mode == AuthDialogMode.SignUp ? "至少 6 位字符" : "输入密码",
             };
+            PasswordBox? confirmPasswordBox = null;
+            TextBox? userIdBox = null;
+            TextBox? nicknameBox = null;
+            TextBox? inviteCodeBox = null;
+            TextBlock? usernameStatusTextBlock = null;
+            CheckBox? termsCheckBox = null;
+            DispatcherTimer? usernameCheckTimer = null;
+            UsernameCheckResult? lastUsernameCheckResult = null;
+            string lastUsernameCheckValue = "";
+            var usernameCheckVersion = 0;
 
             var feedbackBar = new InfoBar
             {
@@ -742,9 +756,51 @@ namespace hanabimanga
 
             if (mode == AuthDialogMode.SignUp)
             {
+                confirmPasswordBox = new PasswordBox
+                {
+                    Header = "确认密码",
+                    PlaceholderText = "再次输入至少 6 位字符",
+                };
+                userIdBox = new TextBox
+                {
+                    Header = "用户名",
+                    PlaceholderText = "3-20 个字符",
+                };
+                usernameStatusTextBlock = new TextBlock
+                {
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = ThemedBrush("TextFillColorSecondaryBrush"),
+                };
+                nicknameBox = new TextBox
+                {
+                    Header = "昵称（选填）",
+                    PlaceholderText = "展示昵称",
+                };
+                inviteCodeBox = new TextBox
+                {
+                    Header = "邀请码（选填）",
+                    PlaceholderText = "填入可获 3 天 VIP",
+                };
+                termsCheckBox = new CheckBox
+                {
+                    Content = "我已阅读并同意用户协议和隐私政策",
+                };
+
+                usernameCheckTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(500),
+                };
+
+                contentPanel.Children.Add(confirmPasswordBox);
+                contentPanel.Children.Add(userIdBox);
+                contentPanel.Children.Add(usernameStatusTextBlock);
+                contentPanel.Children.Add(nicknameBox);
+                contentPanel.Children.Add(inviteCodeBox);
+                contentPanel.Children.Add(termsCheckBox);
                 contentPanel.Children.Add(new TextBlock
                 {
-                    Text = "注册后需要通过邮箱确认账号。",
+                    Text = "注册后可登录账号,邮箱验证在个人资料页完成。",
                     FontSize = 12,
                     TextWrapping = TextWrapping.Wrap,
                     Foreground = ThemedBrush("TextFillColorSecondaryBrush"),
@@ -785,6 +841,123 @@ namespace hanabimanga
                 contentPanel.Children.Add(magicLinkButton);
             }
 
+            void SetUsernameStatus(string message)
+            {
+                if (usernameStatusTextBlock == null) return;
+                usernameStatusTextBlock.Text = message;
+                usernameStatusTextBlock.Visibility = string.IsNullOrWhiteSpace(message)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+            }
+
+            async Task<UsernameCheckResult?> CheckUsernameAvailabilityForSignUpAsync(bool force)
+            {
+                if (mode != AuthDialogMode.SignUp || userIdBox == null)
+                {
+                    return null;
+                }
+
+                var username = userIdBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(username))
+                {
+                    lastUsernameCheckValue = "";
+                    lastUsernameCheckResult = null;
+                    SetUsernameStatus("");
+                    return null;
+                }
+
+                if (!TryValidateUsername(username, out var validationMessage))
+                {
+                    lastUsernameCheckValue = "";
+                    lastUsernameCheckResult = null;
+                    SetUsernameStatus(validationMessage);
+                    return new UsernameCheckResult
+                    {
+                        Available = false,
+                        Reason = "length",
+                    };
+                }
+
+                if (!force &&
+                    string.Equals(lastUsernameCheckValue, username, StringComparison.Ordinal) &&
+                    lastUsernameCheckResult != null)
+                {
+                    return lastUsernameCheckResult;
+                }
+
+                var requestVersion = ++usernameCheckVersion;
+                SetUsernameStatus("正在检查用户名...");
+                try
+                {
+                    var result = await SupabaseService.Instance.CheckUsernameAvailableAsync(username);
+                    if (requestVersion != usernameCheckVersion ||
+                        !string.Equals(userIdBox.Text.Trim(), username, StringComparison.Ordinal))
+                    {
+                        return result;
+                    }
+
+                    lastUsernameCheckValue = username;
+                    lastUsernameCheckResult = result;
+                    SetUsernameStatus(result.Available
+                        ? "用户名可用"
+                        : FormatUsernameUnavailableMessage(result.Reason));
+                    return result;
+                }
+                catch (Exception ex)
+                {
+                    if (requestVersion == usernameCheckVersion)
+                    {
+                        lastUsernameCheckValue = username;
+                        lastUsernameCheckResult = new UsernameCheckResult
+                        {
+                            Available = false,
+                            Reason = "check_failed",
+                        };
+                        SetUsernameStatus("用户名检查失败,请稍后再试。");
+                    }
+
+                    System.Diagnostics.Debug.WriteLine($"[auth-signup] username check failed: {ex.Message}");
+                    return lastUsernameCheckResult;
+                }
+            }
+
+            if (mode == AuthDialogMode.SignUp && userIdBox != null && usernameCheckTimer != null)
+            {
+                usernameStatusTextBlock!.Visibility = Visibility.Collapsed;
+                usernameCheckTimer.Tick += async (_, _) =>
+                {
+                    usernameCheckTimer.Stop();
+                    await CheckUsernameAvailabilityForSignUpAsync(force: false);
+                };
+                userIdBox.TextChanged += (_, _) =>
+                {
+                    usernameCheckTimer.Stop();
+                    usernameCheckVersion++;
+                    lastUsernameCheckValue = "";
+                    lastUsernameCheckResult = null;
+
+                    var username = userIdBox.Text.Trim();
+                    if (string.IsNullOrWhiteSpace(username))
+                    {
+                        SetUsernameStatus("");
+                    }
+                    else if (!TryValidateUsername(username, out var validationMessage))
+                    {
+                        SetUsernameStatus(validationMessage);
+                    }
+                    else
+                    {
+                        SetUsernameStatus("停止输入后检查用户名...");
+                        usernameCheckTimer.Start();
+                    }
+                };
+                userIdBox.LostFocus += async (_, _) =>
+                {
+                    usernameCheckTimer.Stop();
+                    await CheckUsernameAvailabilityForSignUpAsync(force: true);
+                };
+            }
+
             contentPanel.Children.Add(feedbackBar);
 
             var completed = false;
@@ -807,7 +980,24 @@ namespace hanabimanga
                 dialog.IsPrimaryButtonEnabled = false;
                 try
                 {
-                    if (!TryValidateAuthInput(mode, emailBox.Text, passwordBox.Password, out var validationMessage))
+                    if (mode == AuthDialogMode.SignIn)
+                    {
+                        if (!TryValidateSignInInput(emailBox.Text, passwordBox.Password, out var validationMessage))
+                        {
+                            ShowFeedback(feedbackBar, InfoBarSeverity.Warning, "请检查输入", validationMessage);
+                            args.Cancel = true;
+                            return;
+                        }
+                    }
+                    else if (!TryValidateSignUpInput(
+                                 emailBox.Text,
+                                 passwordBox.Password,
+                                 confirmPasswordBox?.Password ?? "",
+                                 userIdBox?.Text ?? "",
+                                 nicknameBox?.Text ?? "",
+                                 inviteCodeBox?.Text ?? "",
+                                 termsCheckBox?.IsChecked == true,
+                                 out var validationMessage))
                     {
                         ShowFeedback(feedbackBar, InfoBarSeverity.Warning, "请检查输入", validationMessage);
                         args.Cancel = true;
@@ -820,7 +1010,26 @@ namespace hanabimanga
                     }
                     else
                     {
-                        await SupabaseService.Instance.SignUpAsync(emailBox.Text.Trim(), passwordBox.Password);
+                        var usernameCheck = await CheckUsernameAvailabilityForSignUpAsync(force: true);
+                        if (usernameCheck?.Available != true)
+                        {
+                            ShowFeedback(
+                                feedbackBar,
+                                InfoBarSeverity.Warning,
+                                "用户名不可用",
+                                FormatUsernameUnavailableMessage(usernameCheck?.Reason));
+                            userIdBox?.Focus(FocusState.Programmatic);
+                            args.Cancel = true;
+                            return;
+                        }
+
+                        StorePendingInviteCode(inviteCodeBox?.Text);
+                        await SupabaseService.Instance.SignUpAsync(
+                            emailBox.Text.Trim(),
+                            passwordBox.Password,
+                            userIdBox?.Text.Trim() ?? "",
+                            nicknameBox?.Text.Trim(),
+                            inviteCodeBox?.Text.Trim());
                     }
 
                     completed = true;
@@ -828,6 +1037,10 @@ namespace hanabimanga
                 catch (Exception ex)
                 {
                     ShowFeedback(feedbackBar, InfoBarSeverity.Error, "操作失败", ex.Message);
+                    if (IsUsernameTakenMessage(ex.Message))
+                    {
+                        userIdBox?.Focus(FocusState.Programmatic);
+                    }
                     args.Cancel = true;
                 }
                 finally
@@ -837,7 +1050,20 @@ namespace hanabimanga
                 }
             };
 
-            var result = await dialog.ShowAsync();
+            _activeAuthDialog = dialog;
+            ContentDialogResult result;
+            try
+            {
+                result = await dialog.ShowAsync();
+            }
+            finally
+            {
+                if (ReferenceEquals(_activeAuthDialog, dialog))
+                {
+                    _activeAuthDialog = null;
+                }
+            }
+
             if (result == ContentDialogResult.Secondary)
             {
                 await ShowAuthDialogAsync(
@@ -849,10 +1075,11 @@ namespace hanabimanga
 
             _isContinueReadingBarDismissed = false;
             UpdateAccountFooter();
+            WarmUpTaskCenterIfSignedIn();
             _ = RefreshContinueReadingBarAsync();
             if (mode == AuthDialogMode.SignUp)
             {
-                await ShowMessageDialogAsync("注册申请已提交", "确认邮件已经发送到你的邮箱,请完成验证后再登录。");
+                await ShowMessageDialogAsync("注册成功", "注册成功。");
             }
         }
 
@@ -979,6 +1206,7 @@ namespace hanabimanga
             }
 
             UpdateAccountFooter();
+            WarmUpTaskCenterIfSignedIn();
             await ShowMessageDialogAsync("登录成功", "已通过邮件链接完成登录。");
         }
 
@@ -1007,21 +1235,27 @@ namespace hanabimanga
             {
                 var claims = ReadJwtUserClaims(accessToken);
                 var displayName = string.IsNullOrWhiteSpace(claims.Email) ? "已登录用户" : claims.Email;
-                var status = $"{GetRoleDisplayName(claims.Role)} · 会话已同步";
+                var status = "会话已同步";
 
-                ApplyAccountDisplay(displayName, status, null);
+                ApplyAccountDisplay(
+                    displayName,
+                    status,
+                    null,
+                    SupabaseService.Instance.IsCurrentUserEmailVerified);
 
                 if (!string.IsNullOrWhiteSpace(claims.UserId))
                 {
-                    _ = LoadAccountProfileAsync(claims.UserId, claims.Email, claims.Role, refreshVersion);
+                    _ = LoadAccountProfileAsync(claims.UserId, claims.Email, refreshVersion);
                 }
 
                 NotificationButton.Visibility = Visibility.Visible;
                 _ = SetupNotificationsAsync(accessToken!, claims.UserId);
+                WarmUpTaskCenterIfSignedIn();
             }
             else
             {
-                ApplyAccountDisplay("登录", "同步收藏和阅读进度", null);
+                TaskCenterService.Instance.ClearCache();
+                ApplyAccountDisplay("登录", "同步收藏和阅读进度", null, false);
                 AccountFlyoutNameTextBlock.Text = "未登录";
                 AccountFlyoutStatusTextBlock.Text = "登录后同步收藏和阅读进度";
                 AccountPersonPicture.DisplayName = "";
@@ -1032,7 +1266,7 @@ namespace hanabimanga
                 SupabaseService.Instance.UnsubscribeNotifications();
                 NotificationsViewModel.Clear();
 
-                if (IsTaskCenterContent(RootFrame.Content))
+                if (IsLoginRequiredContent(RootFrame.Content))
                 {
                     RootFrame.Navigate(typeof(HomePage));
                     RootFrame.BackStack.Clear();
@@ -1050,7 +1284,27 @@ namespace hanabimanga
             => SupabaseService.Instance.IsInitialized && SupabaseService.Instance.IsSignedIn;
 
         private static bool IsTaskCenterContent(object? content)
-            => content is TaskCenterPage or PointsDetailPage or PointsStorePage or ExchangeHistoryPage;
+            => content is TaskCenterPage or PointsDetailPage or PointsStorePage or InvitePage or ExchangeHistoryPage;
+
+        // 退出登录后,这些页面失去前置条件,统一退回主页避免显示陈旧数据或报错。
+        private static bool IsLoginRequiredContent(object? content)
+        {
+            if (IsTaskCenterContent(content)) return true;
+            if (content is UserSettingsPage) return true;
+            if (content is FeedbackListPage or FeedbackSubmitPage or FeedbackDetailPage) return true;
+            if (content is UserProfilePage profilePage && profilePage.ViewModel.IsSelf) return true;
+            return false;
+        }
+
+        private static void WarmUpTaskCenterIfSignedIn()
+        {
+            if (!SupabaseService.Instance.IsInitialized || !SupabaseService.Instance.IsSignedIn)
+            {
+                return;
+            }
+
+            _ = TaskCenterService.Instance.PreloadAsync();
+        }
 
         private async Task SetupNotificationsAsync(string accessToken, string? userId)
         {
@@ -1269,6 +1523,145 @@ namespace hanabimanga
             await dialog.ShowAsync();
         }
 
+        private async void VerifyEmailButton_Click(object sender, RoutedEventArgs e)
+        {
+            AccountFlyout.Hide();
+            await StartEmailVerificationFromUserActionAsync();
+        }
+
+        // 供外部页面(如个人主页)主动触发验证流程。
+        public async Task StartEmailVerificationFromUserActionAsync()
+        {
+            if (!await EnsureSupabaseInitializedAsync())
+            {
+                await ShowMessageDialogAsync(
+                    "认证不可用",
+                    AppendSupabaseError("Supabase 尚未初始化,无法发送验证邮件。"));
+                return;
+            }
+
+            if (!SupabaseService.Instance.IsSignedIn)
+            {
+                ShowAccountFlyout();
+                return;
+            }
+
+            if (await SupabaseService.Instance.RefreshCurrentUserEmailVerificationAsync())
+            {
+                UpdateAccountFooter();
+                await ShowMessageDialogAsync("无需验证", "当前邮箱已通过验证。");
+                return;
+            }
+
+            await StartEmailVerificationFlowAsync(SupabaseService.Instance.CurrentEmail);
+        }
+
+        private async Task StartEmailVerificationFlowAsync(string? email)
+        {
+            hanabimanga.Models.EmailVerificationDispatchResult dispatch;
+            try
+            {
+                dispatch = await SupabaseService.Instance.SendCurrentEmailVerificationOtpAsync(email);
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageDialogAsync("验证码发送失败", ex.Message);
+                return;
+            }
+
+            var codeBox = new TextBox
+            {
+                Header = "邮箱验证码",
+                PlaceholderText = "输入邮箱中的 6 位验证码",
+                MaxLength = 12,
+            };
+            var feedbackBar = new InfoBar
+            {
+                IsOpen = false,
+                IsClosable = false,
+            };
+            var contentPanel = new StackPanel
+            {
+                Spacing = 12,
+                MinWidth = 320,
+            };
+
+            // 优先展示 masked_email,让用户能确认验证码寄到了正确邮箱;再附上过期时间。
+            var intro = string.IsNullOrWhiteSpace(dispatch.MaskedEmail)
+                ? "验证码已发送到你的邮箱。"
+                : $"验证码已发送至 {dispatch.MaskedEmail}。";
+            if (dispatch.ExpiresAt is { } expiresAt)
+            {
+                var remaining = expiresAt.ToUniversalTime() - DateTime.UtcNow;
+                if (remaining.TotalSeconds > 0)
+                {
+                    intro += $"该验证码 {(int)Math.Ceiling(remaining.TotalMinutes)} 分钟内有效。";
+                }
+            }
+            intro += "完成验证后,积分奖励到账情况可在任务中心查看。";
+            contentPanel.Children.Add(new TextBlock
+            {
+                Text = intro,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            contentPanel.Children.Add(codeBox);
+            contentPanel.Children.Add(feedbackBar);
+
+            var completed = false;
+            var dialog = new ContentDialog
+            {
+                XamlRoot = (Content as FrameworkElement)?.XamlRoot,
+                RequestedTheme = (Content as FrameworkElement)?.ActualTheme ?? ElementTheme.Default,
+                Title = "输入邮箱验证码",
+                Content = contentPanel,
+                PrimaryButtonText = "验证",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+            };
+            SyncDialogThemeOnOpen(dialog);
+
+            dialog.PrimaryButtonClick += async (_, args) =>
+            {
+                args.Cancel = true;
+                var code = codeBox.Text.Trim();
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    ShowFeedback(feedbackBar, InfoBarSeverity.Warning, "请检查输入", "请输入邮箱验证码。");
+                    return;
+                }
+
+                dialog.IsPrimaryButtonEnabled = false;
+                codeBox.IsEnabled = false;
+                try
+                {
+                    await SupabaseService.Instance.VerifyCurrentEmailOtpAsync(code, email);
+                    completed = true;
+                    dialog.Hide();
+                }
+                catch (Exception ex)
+                {
+                    ShowFeedback(feedbackBar, InfoBarSeverity.Error, "验证失败", ex.Message);
+                }
+                finally
+                {
+                    if (!completed)
+                    {
+                        dialog.IsPrimaryButtonEnabled = true;
+                        codeBox.IsEnabled = true;
+                    }
+                }
+            };
+
+            await dialog.ShowAsync();
+            if (!completed)
+            {
+                return;
+            }
+
+            UpdateAccountFooter();
+            await ShowMessageDialogAsync("验证成功", "邮箱已验证,积分奖励到账后可在任务中心查看。");
+        }
+
         // ContentDialog 经 XamlRoot 弹出时,命令栏等模板部件不随 dialog.RequestedTheme,
         // 会停留在应用启动时的主题,导致上半内容区与下半按钮区主题割裂。
         // 打开后对模板根(LayoutRoot)整体再赋一次当前主题,强制所有已实例化部件重解析。
@@ -1302,8 +1695,7 @@ namespace hanabimanga
             return (Brush)Application.Current.Resources[key];
         }
 
-        private static bool TryValidateAuthInput(
-            AuthDialogMode mode,
+        private static bool TryValidateSignInInput(
             string email,
             string password,
             out string message)
@@ -1316,13 +1708,132 @@ namespace hanabimanga
                 return false;
             }
 
-            if (mode == AuthDialogMode.SignUp && password.Length < 6)
+            message = "";
+            return true;
+        }
+
+        private static bool TryValidateSignUpInput(
+            string email,
+            string password,
+            string confirmPassword,
+            string userId,
+            string nickname,
+            string inviteCode,
+            bool acceptedTerms,
+            out string message)
+        {
+            if (!TryValidateSignInInput(email, password, out message)) return false;
+
+            if (password.Length < 6)
             {
-                message = "Supabase Auth 默认要求密码至少 6 位。";
+                message = "密码至少需要 6 位。";
+                return false;
+            }
+
+            if (confirmPassword.Length < 6)
+            {
+                message = "确认密码至少需要 6 位。";
+                return false;
+            }
+
+            if (!string.Equals(password, confirmPassword, StringComparison.Ordinal))
+            {
+                message = "两次输入的密码不一致。";
+                return false;
+            }
+
+            var normalizedUserId = userId.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserId))
+            {
+                message = "请输入用户名。";
+                return false;
+            }
+
+            if (!TryValidateUsername(normalizedUserId, out message))
+            {
+                return false;
+            }
+
+            if (nickname.Trim().Length > 32)
+            {
+                message = "昵称不能超过 32 个字符。";
+                return false;
+            }
+
+            if (inviteCode.Trim().Length > 64)
+            {
+                message = "邀请码不能超过 64 个字符。";
+                return false;
+            }
+
+            if (!acceptedTerms)
+            {
+                message = "请先阅读并同意用户协议和隐私政策。";
                 return false;
             }
 
             return true;
+        }
+
+        private static bool TryValidateUsername(string username, out string message)
+        {
+            var normalized = username.Trim();
+            if (normalized.Length < 3 || normalized.Length > 20)
+            {
+                message = "用户名需要 3-20 个字符。";
+                return false;
+            }
+
+            message = "";
+            return true;
+        }
+
+        private static string FormatUsernameUnavailableMessage(string? reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) return "用户名已被占用,请换一个。";
+
+            var normalized = reason.Trim().ToLowerInvariant();
+            if (normalized.Contains("available", StringComparison.Ordinal) &&
+                normalized.Contains("false", StringComparison.Ordinal))
+            {
+                return "用户名已被占用,请换一个。";
+            }
+
+            return normalized switch
+            {
+                "taken" or "username_taken" or "duplicate" => "用户名已被占用,请换一个。",
+                "length" or "invalid_length" => "用户名需要 3-20 个字符。",
+                "invalid" or "invalid_format" => "用户名格式不符合要求。",
+                "reserved" => "该用户名不可使用,请换一个。",
+                "check_failed" => "用户名检查失败,请稍后再试。",
+                _ => reason!,
+            };
+        }
+
+        private static bool IsUsernameTakenMessage(string? message)
+            => !string.IsNullOrWhiteSpace(message) &&
+                (message.Contains("用户名已被占用", StringComparison.Ordinal) ||
+                 message.Contains("USERNAME_RACE_TAKEN", StringComparison.OrdinalIgnoreCase));
+
+        private static void StorePendingInviteCode(string? inviteCode)
+        {
+            const string key = "invite_prompt.pending_invite_code";
+            try
+            {
+                var values = Windows.Storage.ApplicationData.Current.LocalSettings.Values;
+                var normalized = inviteCode?.Trim();
+                if (string.IsNullOrWhiteSpace(normalized))
+                {
+                    values.Remove(key);
+                    return;
+                }
+
+                values[key] = normalized;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[auth-signup] pending invite persistence failed: {ex.Message}");
+            }
         }
 
         private static bool TryValidateEmail(string email, out string message)
@@ -1355,7 +1866,6 @@ namespace hanabimanga
         private async Task LoadAccountProfileAsync(
             string userId,
             string? email,
-            string role,
             int refreshVersion)
         {
             try
@@ -1364,11 +1874,12 @@ namespace hanabimanga
                 if (refreshVersion != _accountRefreshVersion || profile == null) return;
 
                 var displayName = GetAccountDisplayName(profile, email);
-                var status = BuildAccountStatus(role, profile);
+                var status = BuildAccountStatus(profile);
+                var isEmailVerified = await SupabaseService.Instance.RefreshCurrentUserEmailVerificationAsync();
                 System.Diagnostics.Debug.WriteLine(
                     "[account] applying profile: " +
-                    $"displayName={displayName}, role={role}, avatar_url={profile.AvatarUrl ?? "(null)"}");
-                ApplyAccountDisplay(displayName, status, profile.AvatarUrl);
+                    $"displayName={displayName}, avatar_url={profile.AvatarUrl ?? "(null)"}");
+                ApplyAccountDisplay(displayName, status, profile.AvatarUrl, isEmailVerified);
             }
             catch (Exception ex)
             {
@@ -1376,12 +1887,24 @@ namespace hanabimanga
             }
         }
 
-        private void ApplyAccountDisplay(string displayName, string status, string? avatarUrl)
+        private void ApplyAccountDisplay(
+            string displayName,
+            string status,
+            string? avatarUrl,
+            bool isEmailVerified)
         {
             AccountNameTextBlock.Text = displayName;
             AccountStatusTextBlock.Text = status;
             AccountFlyoutNameTextBlock.Text = displayName;
             AccountFlyoutStatusTextBlock.Text = status;
+
+            // 已验证徽标对应蓝色对勾;未登录或未验证时不显示徽标,不再额外展示警示图标。
+            // 账户菜单里的「验证邮箱」按钮仍对未验证账号显示,作为统一的验证入口。
+            var isSignedIn = SupabaseService.Instance.IsSignedIn;
+            var showVerifyButton = isSignedIn && !isEmailVerified;
+            AccountVerifiedBadge.Visibility = isEmailVerified ? Visibility.Visible : Visibility.Collapsed;
+            AccountFlyoutVerifiedBadge.Visibility = isEmailVerified ? Visibility.Visible : Visibility.Collapsed;
+            AccountFlyoutVerifyEmailButton.Visibility = showVerifyButton ? Visibility.Visible : Visibility.Collapsed;
 
             AccountPersonPicture.DisplayName = displayName;
             AccountFlyoutPersonPicture.DisplayName = displayName;
@@ -1457,15 +1980,19 @@ namespace hanabimanga
             return "已登录用户";
         }
 
-        private static string BuildAccountStatus(string role, UserProfile profile)
+        private static string BuildAccountStatus(UserProfile profile)
         {
-            var roleText = GetRoleDisplayName(role);
-            if (profile.VipExpirationDate is { } vipExpirationDate && vipExpirationDate > DateTime.UtcNow)
+            if (profile.IsPermanentVip)
             {
-                return $"{roleText} · VIP 至 {vipExpirationDate:yyyy-MM-dd}";
+                return "永久会员";
             }
 
-            return $"{roleText} · 会话已同步";
+            if (profile.VipExpirationDate is { } vipExpirationDate && vipExpirationDate > DateTime.UtcNow)
+            {
+                return $"VIP 至 {vipExpirationDate:yyyy-MM-dd}";
+            }
+
+            return "普通用户";
         }
 
         private static (string? UserId, string? Email, string Role) ReadJwtUserClaims(string? accessToken)
@@ -1505,12 +2032,5 @@ namespace hanabimanga
                 return (null, null, "user");
             }
         }
-
-        private static string GetRoleDisplayName(string role) => role switch
-        {
-            "admin" => "管理员",
-            "editor" => "编辑",
-            _ => "普通用户",
-        };
     }
 }

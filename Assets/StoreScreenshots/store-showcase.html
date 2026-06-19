@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HanabiManga Store Showcase</title>
+  <style>
+    :root {
+      --bg-0: #fff5f8;
+      --bg-1: #ffe7ef;
+      --bg-2: #fffafd;
+      --pane: rgba(255, 248, 251, 0.94);
+      --pane-2: rgba(255, 241, 247, 0.82);
+      --card: rgba(255, 252, 253, 0.94);
+      --stroke: rgba(159, 70, 104, 0.34);
+      --stroke-soft: rgba(159, 70, 104, 0.18);
+      --text: #2b1420;
+      --muted: #745164;
+      --faint: #9b7284;
+      --accent: #e23a6d;
+      --accent-2: #ff9ebc;
+      --accent-3: #ffd6e3;
+      --gold: #f8c85c;
+      --mint: #4ecdc4;
+      --blue: #4a90d9;
+      --violet: #9b8dff;
+      --green: #7cb342;
+      --shadow: 0 32px 90px rgba(79, 31, 50, 0.18);
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: var(--bg-0);
+      color: var(--text);
+      font-family: var(--font, "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", "Segoe UI", sans-serif);
+    }
+
+    body {
+      letter-spacing: 0;
+    }
+
+    .stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background:
+        linear-gradient(136deg, rgba(255, 248, 251, 0.96) 0%, rgba(255, 224, 236, 0.88) 46%, rgba(255, 250, 251, 0.98) 100%);
+    }
+
+    .stage::before,
+    .stage::after {
+      content: "";
+      position: absolute;
+      inset: auto;
+      pointer-events: none;
+      opacity: 0.42;
+      filter: blur(0);
+    }
+
+    .stage::before {
+      width: 760px;
+      height: 760px;
+      left: -220px;
+      top: -260px;
+      background: radial-gradient(circle, rgba(255, 214, 227, 0.9) 0 28%, rgba(255, 214, 227, 0) 70%);
+    }
+
+    .stage::after {
+      width: 620px;
+      height: 620px;
+      right: -180px;
+      bottom: -220px;
+      background: radial-gradient(circle, rgba(255, 158, 188, 0.42) 0 26%, rgba(255, 158, 188, 0) 70%);
+    }
+
+    .window {
+      position: absolute;
+      left: 54px;
+      top: 42px;
+      width: 1812px;
+      height: 996px;
+      border: 1px solid rgba(159, 70, 104, 0.25);
+      border-radius: 18px;
+      background: rgba(255, 251, 253, 0.78);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      backdrop-filter: blur(12px);
+    }
+
+    .titlebar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 56px;
+      display: grid;
+      grid-template-columns: 52px 34px 122px 1fr 420px 1fr 178px;
+      align-items: center;
+      gap: 10px;
+      padding: 0 18px 0 8px;
+      background: rgba(255, 248, 251, 0.68);
+      border-bottom: 1px solid rgba(159, 70, 104, 0.14);
+    }
+
+    .hamburger,
+    .icon-button,
+    .window-control {
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      background: transparent;
+      font-size: 21px;
+      line-height: 1;
+    }
+
+    .hamburger span {
+      width: 18px;
+      height: 12px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .hamburger i,
+    .icon-lines i {
+      display: block;
+      height: 2px;
+      background: currentColor;
+      border-radius: 2px;
+    }
+
+    .logo-small {
+      width: 26px;
+      height: 26px;
+      border-radius: 7px;
+      object-fit: cover;
+      box-shadow: 0 2px 8px rgba(226, 58, 109, 0.2);
+    }
+
+    .app-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .search {
+      height: 38px;
+      border: 1px solid rgba(159, 70, 104, 0.26);
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.68);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+      color: var(--faint);
+      font-size: 14px;
+    }
+
+    .search::before {
+      content: "⌕";
+      font-size: 22px;
+      transform: translateY(-1px);
+      color: var(--accent);
+    }
+
+    .window-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .content {
+      position: absolute;
+      left: 0;
+      top: 56px;
+      width: 100%;
+      height: calc(100% - 56px);
+      display: grid;
+      grid-template-columns: 244px 1fr;
+      background:
+        linear-gradient(145deg, rgba(255, 243, 247, 0.86) 0%, rgba(255, 220, 232, 0.62) 50%, rgba(255, 252, 253, 0.88) 100%);
+    }
+
+    .sidebar {
+      width: 244px;
+      height: 100%;
+      padding: 22px 14px;
+      background: rgba(255, 245, 249, 0.78);
+      border-right: 1px solid rgba(159, 70, 104, 0.14);
+    }
+
+    .side-group {
+      display: grid;
+      gap: 7px;
+    }
+
+    .nav-item {
+      height: 42px;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .nav-item.active {
+      background: rgba(226, 58, 109, 0.14);
+      color: #6f223a;
+      font-weight: 700;
+      box-shadow: inset 4px 0 0 var(--accent);
+    }
+
+    .nav-icon {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      color: inherit;
+      font-size: 18px;
+    }
+
+    .account-card {
+      margin-top: 28px;
+      padding: 14px;
+      border: 1px solid var(--stroke-soft);
+      border-radius: 10px;
+      background: rgba(255, 252, 253, 0.66);
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 60% 40%, #fff 0 15%, transparent 16%),
+        linear-gradient(135deg, #ffd8e5, #ff7ba2);
+      border: 1px solid rgba(226, 58, 109, 0.24);
+    }
+
+    .account-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .account-name {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .account-meta,
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .main {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .page {
+      position: absolute;
+      inset: 0;
+      padding: 28px 34px 34px;
+      overflow: hidden;
+    }
+
+    .page-inner {
+      max-width: 1260px;
+      height: 100%;
+      margin: 0 auto;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 30px;
+      line-height: 1.2;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    h2 {
+      font-size: 21px;
+      line-height: 1.25;
+      font-weight: 800;
+    }
+
+    h3 {
+      font-size: 16px;
+      line-height: 1.3;
+      font-weight: 800;
+    }
+
+    .sub {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .button {
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 13px;
+      border: 1px solid var(--stroke-soft);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.64);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 10px 28px rgba(226, 58, 109, 0.26);
+    }
+
+    .card {
+      border: 1px solid var(--stroke-soft);
+      border-radius: 8px;
+      background: var(--card);
+      box-shadow: 0 14px 34px rgba(80, 34, 52, 0.08);
+    }
+
+    .recommend-banner {
+      height: 224px;
+      display: grid;
+      grid-template-columns: 1.9fr 1fr;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .recommend {
+      padding: 17px;
+      overflow: hidden;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .mini-item {
+      height: 68px;
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .cover-sm {
+      width: 48px;
+      height: 64px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      box-shadow: 0 7px 18px rgba(90, 32, 54, 0.16);
+    }
+
+    .cover-lg {
+      height: 226px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.56);
+      box-shadow: 0 14px 30px rgba(90, 32, 54, 0.14);
+    }
+
+    .book-title {
+      font-size: 14px;
+      line-height: 1.35;
+      font-weight: 800;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .book-author {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .banner {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(145deg, rgba(226, 58, 109, 0.18), rgba(255, 158, 188, 0.28)),
+        linear-gradient(135deg, #fff6f9, #ffe1ec);
+    }
+
+    .banner::before {
+      content: "";
+      position: absolute;
+      width: 420px;
+      height: 420px;
+      border-radius: 42px;
+      right: -138px;
+      top: -118px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 214, 227, 0.28));
+      transform: rotate(18deg);
+      border: 1px solid rgba(255, 255, 255, 0.64);
+      z-index: 0;
+    }
+
+    .banner::after {
+      content: "";
+      position: absolute;
+      left: 30px;
+      top: 48px;
+      width: 120px;
+      height: 156px;
+      border-radius: 10px;
+      background: linear-gradient(160deg, #1e2236, #e23a6d 45%, #ffd6e3);
+      transform: rotate(-8deg);
+      box-shadow: 26px 10px 0 rgba(255, 255, 255, 0.54), 52px 19px 0 rgba(255, 158, 188, 0.44);
+      z-index: 0;
+    }
+
+    .banner-caption {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(255, 250, 253, 0.78);
+      color: var(--text);
+      font-weight: 800;
+      backdrop-filter: blur(6px);
+      z-index: 1;
+    }
+
+    .section-title {
+      margin: 8px 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .comic-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 16px;
+    }
+
+    .comic-card {
+      padding: 10px;
+      border-radius: 10px;
+      min-width: 0;
+    }
+
+    .comic-card .book-title {
+      margin: 9px 2px 0;
+      white-space: normal;
+      height: 38px;
+      line-height: 19px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .comic-card .book-author {
+      margin-left: 2px;
+      margin-right: 2px;
+    }
+
+    .cover {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(145deg, var(--c1), var(--c2));
+    }
+
+    .cover::before {
+      content: "";
+      position: absolute;
+      inset: 12%;
+      border-radius: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.72);
+      transform: rotate(var(--rot, -7deg));
+    }
+
+    .cover::after {
+      content: "";
+      position: absolute;
+      width: 46%;
+      height: 22%;
+      left: 18%;
+      bottom: 18%;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.65);
+      transform: rotate(-12deg);
+      box-shadow: 46px -72px 0 rgba(255, 255, 255, 0.28), 78px -34px 0 rgba(255, 255, 255, 0.36);
+    }
+
+    .cover.dark::before {
+      border-color: rgba(255, 255, 255, 0.52);
+    }
+
+    .tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid var(--stroke-soft);
+    }
+
+    .tab {
+      height: 32px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      border-radius: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .tab.active {
+      color: #6f223a;
+      background: rgba(226, 58, 109, 0.15);
+    }
+
+    .detail-layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 24px;
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    .detail-cover {
+      height: 344px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 20px 42px rgba(90, 32, 54, 0.16);
+    }
+
+    .meta-row,
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill {
+      height: 28px;
+      padding: 0 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 6px;
+      background: rgba(226, 58, 109, 0.13);
+      color: #6f223a;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid rgba(226, 58, 109, 0.1);
+    }
+
+    .pill.gray {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.62);
+      border-color: var(--stroke-soft);
+    }
+
+    .summary {
+      margin-top: 13px;
+      max-width: 840px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .chapter-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .chapter {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      padding: 0 13px;
+      border-radius: 8px;
+      border: 1px solid var(--stroke-soft);
+      background: rgba(255, 255, 255, 0.58);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .comment-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .comment {
+      padding: 16px;
+      min-height: 118px;
+    }
+
+    .comment-line {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .reader-page {
+      padding: 0;
+    }
+
+    .reader-shell {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-rows: 60px 1fr;
+      background: rgba(37, 24, 33, 0.94);
+      color: #fff7fa;
+    }
+
+    .reader-toolbar {
+      display: grid;
+      grid-template-columns: 230px 1fr 600px;
+      align-items: center;
+      padding: 0 22px;
+      gap: 16px;
+      background: rgba(32, 20, 28, 0.88);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .reader-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .reader-button {
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff7fa;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .reader-title {
+      text-align: center;
+    }
+
+    .reader-title b {
+      display: block;
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    .reader-title span {
+      display: block;
+      margin-top: 2px;
+      color: #e7b8c8;
+      font-size: 12px;
+    }
+
+    .reader-canvas {
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(255, 247, 250, 0.06), rgba(255, 247, 250, 0)),
+        #21141d;
+    }
+
+    .paper {
+      position: absolute;
+      top: 34px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 640px;
+      height: 820px;
+      padding: 22px;
+      border-radius: 4px;
+      background: #fffdf8;
+      box-shadow: 0 34px 120px rgba(0, 0, 0, 0.42);
+      display: grid;
+      grid-template-rows: 1.08fr 0.92fr 1fr;
+      gap: 16px;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      border: 3px solid #201820;
+      background:
+        linear-gradient(135deg, rgba(226, 58, 109, 0.08), rgba(74, 144, 217, 0.08)),
+        #fff;
+    }
+
+    .panel::before,
+    .panel::after {
+      content: "";
+      position: absolute;
+      border: 3px solid #201820;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .panel.a::before {
+      width: 150px;
+      height: 180px;
+      left: 70px;
+      bottom: -36px;
+      border-radius: 80px 80px 20px 20px;
+    }
+
+    .panel.a::after {
+      width: 220px;
+      height: 94px;
+      right: 42px;
+      top: 30px;
+      border-radius: 50%;
+      transform: rotate(-7deg);
+    }
+
+    .panel.b::before {
+      width: 250px;
+      height: 140px;
+      left: 40px;
+      top: 44px;
+      border-radius: 8px;
+      transform: rotate(-5deg);
+      background: linear-gradient(135deg, #f7f0f4, #fff);
+    }
+
+    .panel.b::after {
+      width: 180px;
+      height: 210px;
+      right: 54px;
+      bottom: -44px;
+      border-radius: 92px 92px 24px 24px;
+    }
+
+    .panel.c::before {
+      width: 210px;
+      height: 210px;
+      left: 38px;
+      top: 44px;
+      border-radius: 50%;
+      background: rgba(226, 58, 109, 0.08);
+    }
+
+    .panel.c::after {
+      width: 250px;
+      height: 120px;
+      right: 54px;
+      bottom: 36px;
+      border-radius: 50%;
+      transform: rotate(9deg);
+    }
+
+    .reader-side-page {
+      position: absolute;
+      top: 72px;
+      width: 330px;
+      height: 500px;
+      border-radius: 4px;
+      background: #fffdf8;
+      opacity: 0.24;
+      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.36);
+    }
+
+    .reader-side-page.left {
+      left: 190px;
+      transform: rotate(-5deg);
+    }
+
+    .reader-side-page.right {
+      right: 190px;
+      transform: rotate(5deg);
+    }
+
+    .bookshelf-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .history-card {
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(255, 252, 253, 0.72);
+    }
+
+    .progress {
+      height: 7px;
+      margin: 9px 2px 0;
+      border-radius: 999px;
+      background: rgba(159, 70, 104, 0.13);
+      overflow: hidden;
+    }
+
+    .progress i {
+      display: block;
+      width: var(--p);
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .task-layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 18px;
+    }
+
+    .points-panel {
+      position: relative;
+      height: 196px;
+      padding: 24px;
+      overflow: hidden;
+      color: white;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #f378a2, #ff9ebb 55%, #f7b2c6);
+      box-shadow: 0 22px 54px rgba(226, 58, 109, 0.24);
+    }
+
+    .points-panel::after {
+      content: "";
+      position: absolute;
+      right: -70px;
+      top: -110px;
+      width: 360px;
+      height: 360px;
+      border-radius: 46px;
+      transform: rotate(25deg);
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .points-value {
+      margin-top: 16px;
+      font-size: 54px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .task-card {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .task-row {
+      display: grid;
+      grid-template-columns: 46px 1fr 84px;
+      align-items: center;
+      gap: 12px;
+      min-height: 54px;
+    }
+
+    .task-icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      color: #6f223a;
+      background: rgba(226, 58, 109, 0.13);
+      font-size: 20px;
+    }
+
+    .task-row .button {
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .swatch {
+      height: 78px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--stroke-soft);
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    .swatch-color {
+      height: 28px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, var(--a), var(--b));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.36);
+    }
+
+    .swatch span {
+      display: block;
+      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .hero-art {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(138deg, #fff6fa 0%, #ffe3ec 42%, #fffafd 100%);
+      overflow: hidden;
+    }
+
+    .hero-art .sheet {
+      position: absolute;
+      width: var(--w);
+      height: var(--h);
+      left: var(--x);
+      top: var(--y);
+      border-radius: 12px;
+      background: #fffdf8;
+      border: 1px solid rgba(159, 70, 104, 0.16);
+      box-shadow: 0 26px 70px rgba(91, 37, 57, 0.16);
+      transform: rotate(var(--r));
+      overflow: hidden;
+    }
+
+    .hero-art .sheet::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border: 4px solid rgba(41, 28, 36, 0.76);
+      border-radius: 8px;
+      box-shadow: 0 160px 0 -60px rgba(226, 58, 109, 0.18), 0 320px 0 -100px rgba(74, 144, 217, 0.16);
+    }
+
+    .hero-art .sheet::after {
+      content: "";
+      position: absolute;
+      width: 46%;
+      height: 12%;
+      left: 18%;
+      top: 36%;
+      border-radius: 999px;
+      background: rgba(226, 58, 109, 0.14);
+      box-shadow: 130px 90px 0 rgba(74, 144, 217, 0.14), 76px -86px 0 rgba(248, 200, 92, 0.2);
+    }
+
+    .hero-art .book {
+      position: absolute;
+      width: var(--w);
+      height: var(--h);
+      left: var(--x);
+      top: var(--y);
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--a), var(--b));
+      transform: rotate(var(--r));
+      box-shadow: 0 26px 66px rgba(91, 37, 57, 0.18);
+      overflow: hidden;
+    }
+
+    .hero-art .book::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border-radius: 10px;
+      border: 2px solid rgba(255, 255, 255, 0.72);
+    }
+
+    .hero-art .book::after {
+      content: "";
+      position: absolute;
+      left: 20%;
+      top: 20%;
+      width: 55%;
+      height: 18%;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.46);
+      box-shadow: 42px 100px 0 rgba(255, 255, 255, 0.28), -16px 220px 0 rgba(255, 255, 255, 0.22);
+    }
+
+    .hero-art .ribbon {
+      position: absolute;
+      height: 70px;
+      width: 980px;
+      left: var(--x);
+      top: var(--y);
+      border-radius: 999px;
+      background: rgba(248, 200, 92, 0.34);
+      transform: rotate(var(--r));
+      filter: blur(1px);
+    }
+
+    .hero-art .focus {
+      position: absolute;
+      left: 530px;
+      top: 120px;
+      width: 860px;
+      height: 760px;
+      border-radius: 44px;
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(255, 214, 227, 0.18));
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 40px 120px rgba(91, 37, 57, 0.14);
+      transform: rotate(-4deg);
+    }
+
+    .caption-safe {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 330px;
+      background: linear-gradient(180deg, rgba(255, 245, 249, 0), rgba(255, 245, 249, 0.42));
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="root" class="stage"></div>
+  <script>
+    const shot = new URLSearchParams(location.search).get("shot") || "home";
+    const root = document.getElementById("root");
+
+    const nav = [
+      ["home", "⌂", "首页"],
+      ["discover", "◇", "发现"],
+      ["ranking", "≡", "排行榜"],
+      ["bookshelf", "▤", "书架"],
+      ["tasks", "◎", "任务中心"],
+      ["settings", "⚙", "设置"]
+    ];
+
+    const books = [
+      ["星河便利店", "南川", "#2b2f4f", "#e23a6d", "dark"],
+      ["午后短篇集", "青见", "#ff9ebc", "#ffd6e3", ""],
+      ["纸灯小路", "遥夏", "#4ecdc4", "#fff1c7", ""],
+      ["晴空邮差", "云野", "#4a90d9", "#d6ecff", ""],
+      ["薄荷色房间", "北岛", "#7cb342", "#d9f0c1", ""],
+      ["夜航手记", "若叶", "#21141d", "#9b8dff", "dark"],
+      ["雨后的烟火", "灯里", "#e23a6d", "#f8c85c", ""],
+      ["玻璃海岸", "星野", "#58a6ff", "#4ecdc4", ""],
+      ["城市边角", "千枝", "#8f5a74", "#ffd6e3", ""],
+      ["第七封信", "白原", "#9b8dff", "#fff1c7", ""]
+    ];
+
+    function cover(index, cls = "cover-lg") {
+      const b = books[index % books.length];
+      const rot = index % 2 ? "6deg" : "-7deg";
+      return `<div class="${cls}"><div class="cover ${b[4]}" style="--c1:${b[2]};--c2:${b[3]};--rot:${rot}"></div></div>`;
+    }
+
+    function windowFrame(active, page) {
+      return `
+        <div class="window">
+          <div class="titlebar">
+            <div class="hamburger"><span><i></i><i></i><i></i></span></div>
+            <img class="logo-small" src="../logo.png" alt="" />
+            <div class="app-name">花火漫画</div>
+            <div></div>
+            <div class="search">搜索漫画、作者、标签</div>
+            <div></div>
+            <div class="window-buttons">
+              <div class="window-control">─</div>
+              <div class="window-control">□</div>
+              <div class="window-control">×</div>
+            </div>
+          </div>
+          <div class="content">
+            <aside class="sidebar">
+              <div class="side-group">
+                ${nav.map(item => `
+                  <div class="nav-item ${item[0] === active ? "active" : ""}">
+                    <div class="nav-icon">${item[1]}</div>
+                    <div>${item[2]}</div>
+                  </div>`).join("")}
+              </div>
+              <div class="account-card">
+                <div class="account-row">
+                  <div class="avatar"></div>
+                  <div>
+                    <div class="account-name">花火用户</div>
+                    <div class="account-meta">Lv. 4 · 1280 积分</div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+            <main class="main">${page}</main>
+          </div>
+        </div>`;
+    }
+
+    function homePage() {
+      const mini = [0, 1, 2, 3, 4, 5].map(i => `
+        <div class="mini-item">
+          ${cover(i, "cover-sm")}
+          <div>
+            <div class="book-title">${books[i][0]}</div>
+            <div class="book-author">${books[i][1]} · 更新至 ${18 + i} 话</div>
+          </div>
+        </div>`).join("");
+      const cards = [6, 7, 8, 9, 0, 1].map(i => `
+        <div class="comic-card">
+          ${cover(i)}
+          <div class="book-title">${books[i][0]}</div>
+          <div class="book-author">${books[i][1]}</div>
+        </div>`).join("");
+      return windowFrame("home", `
+        <section class="page">
+          <div class="page-inner">
+            <div class="header-row">
+              <div>
+                <h1>首页</h1>
+                <p class="sub">推荐、最近更新与排行榜集中浏览</p>
+              </div>
+              <div class="button">⟳ 刷新</div>
+            </div>
+            <div class="recommend-banner">
+              <div class="card recommend">
+                <div class="section-title" style="margin:0 0 4px;">
+                  <h2>为你推荐</h2>
+                  <div class="button">⟳ 换一换</div>
+                </div>
+                <div class="mini-grid">${mini}</div>
+              </div>
+              <div class="card banner">
+                <div class="banner-caption">本周专题 · 清爽阅读季</div>
+              </div>
+            </div>
+            <div class="section-title">
+              <h2>最近更新</h2>
+              <div class="muted">今日新增 24 部作品</div>
+            </div>
+            <div class="comic-grid">${cards}</div>
+          </div>
+        </section>`);
+    }
+
+    function detailPage() {
+      const chapters = Array.from({ length: 12 }, (_, i) => `<div class="chapter">第 ${String(i + 1).padStart(2, "0")} 话</div>`).join("");
+      return windowFrame("discover", `
+        <section class="page">
+          <div class="page-inner">
+            <div class="header-row">
+              <div>
+                <h1>漫画详情</h1>
+                <p class="sub">作品信息、章节列表与读者互动</p>
+              </div>
+              <div class="button">← 返回</div>
+            </div>
+            <div class="card detail-layout">
+              <div class="detail-cover"><div class="cover ${books[6][4]}" style="--c1:${books[6][2]};--c2:${books[6][3]};--rot:-7deg"></div></div>
+              <div>
+                <h1 style="font-size:32px;">雨后的烟火</h1>
+                <div class="meta-row" style="margin-top:12px;">
+                  <span class="muted">灯里</span>
+                  <span class="pill">连载中</span>
+                  <span class="pill gray">42 话</span>
+                  <span class="pill gray">9.2 分</span>
+                  <span class="pill gray">2026</span>
+                </div>
+                <p class="summary">在雨后微亮的城市里，几个年轻人从日常细节中寻找继续前进的理由。轻松、温柔、节奏干净，适合碎片时间慢慢阅读。</p>
+                <div class="chip-row" style="margin-top:16px;">
+                  <span class="pill gray">治愈</span>
+                  <span class="pill gray">日常</span>
+                  <span class="pill gray">短篇</span>
+                  <span class="pill gray">校园</span>
+                  <span class="pill gray">温柔叙事</span>
+                </div>
+                <div class="meta-row" style="margin-top:22px;">
+                  <div class="button primary">▶ 开始阅读</div>
+                  <div class="button">♡ 收藏</div>
+                  <div class="button">☆ 评分</div>
+                </div>
+              </div>
+            </div>
+            <div class="card" style="padding:18px;margin-bottom:16px;">
+              <div class="section-title" style="margin:0 0 4px;"><h2>章节</h2><div class="muted">最近更新：第 42 话</div></div>
+              <div class="chapter-grid">${chapters}</div>
+            </div>
+            <div class="comment-strip">
+              <div class="card comment"><h3>热门评论</h3><p class="comment-line">画面节奏很舒服，章节切换也很顺。</p><p class="muted" style="margin-top:10px;">花火用户 · 2 小时前</p></div>
+              <div class="card comment"><h3>读者评分</h3><p class="comment-line">平均 9.2 分 · 328 人参与评分。</p><p class="muted" style="margin-top:10px;">收藏 1.2 万 · 点赞 3.6 万</p></div>
+            </div>
+          </div>
+        </section>`);
+    }
+
+    function readerPage() {
+      return windowFrame("home", `
+        <section class="page reader-page">
+          <div class="reader-shell">
+            <div class="reader-toolbar">
+              <div class="reader-buttons">
+                <div class="reader-button">‹ 上一话</div>
+                <div class="reader-button">下一话 ›</div>
+              </div>
+              <div class="reader-title"><b>第 12 话 雨后的烟火</b><span>雨后的烟火</span></div>
+              <div class="reader-buttons" style="justify-content:flex-end;">
+                <div class="reader-button">✨ AI 超分</div>
+                <div class="reader-button">−</div>
+                <div class="reader-button">100%</div>
+                <div class="reader-button">＋</div>
+                <div class="reader-button">下载</div>
+                <div class="reader-button">瀑布流模式</div>
+                <div class="reader-button">↑</div>
+              </div>
+            </div>
+            <div class="reader-canvas">
+              <div class="reader-side-page left"></div>
+              <div class="reader-side-page right"></div>
+              <div class="paper">
+                <div class="panel a"></div>
+                <div class="panel b"></div>
+                <div class="panel c"></div>
+              </div>
+            </div>
+          </div>
+        </section>`);
+    }
+
+    function bookshelfPage() {
+      const cards = [0, 6, 3, 7, 5].map((i, idx) => `
+        <div class="history-card">
+          ${cover(i)}
+          <div class="book-title">${books[i][0]}</div>
+          <div class="book-author">读到第 ${12 + idx * 3} 话</div>
+          <div class="progress" style="--p:${42 + idx * 11}%"><i></i></div>
+        </div>`).join("");
+      return windowFrame("bookshelf", `
+        <section class="page">
+          <div class="page-inner">
+            <div class="header-row">
+              <div>
+                <h1>书架</h1>
+                <p class="sub">你的阅读历史、收藏与点赞</p>
+              </div>
+              <div class="button">⟳ 刷新</div>
+            </div>
+            <div class="tabs">
+              <div class="tab active">历史</div>
+              <div class="tab">收藏</div>
+              <div class="tab">点赞</div>
+            </div>
+            <p class="sub" style="margin-top:14px;">最近阅读 18 部作品 · 5 部正在追更</p>
+            <div class="bookshelf-grid">${cards}</div>
+            <div class="comment-strip" style="margin-top:18px;">
+              <div class="card comment"><h3>本地进度</h3><p class="comment-line">自动记录章节与页码，下次打开可继续阅读。</p></div>
+              <div class="card comment"><h3>云端收藏</h3><p class="comment-line">登录后在不同设备间同步收藏、点赞与历史。</p></div>
+            </div>
+          </div>
+        </section>`);
+    }
+
+    function tasksPage() {
+      const tasks = [
+        ["✓", "每日签到", "+10 积分", "已完成"],
+        ["▣", "阅读 15 分钟", "+20 积分", "领取"],
+        ["♡", "收藏一部作品", "+5 积分", "领取"],
+        ["✉", "提交反馈", "+15 积分", "去完成"]
+      ].map(t => `
+        <div class="task-row">
+          <div class="task-icon">${t[0]}</div>
+          <div>
+            <div class="book-title">${t[1]}</div>
+            <div class="book-author">${t[2]}</div>
+          </div>
+          <div class="button ${t[3] === "领取" ? "primary" : ""}">${t[3]}</div>
+        </div>`).join("");
+      const swatches = [
+        ["樱花粉", "#ff9eaf", "#ffb4c2"],
+        ["蜜橘橙", "#ff8a50", "#ffa26e"],
+        ["深海蓝", "#4a90d9", "#58a6ff"],
+        ["薄荷青", "#4ecdc4", "#6eddd6"],
+        ["罗兰紫", "#9b8dff", "#b4a7ff"],
+        ["抹茶绿", "#7cb342", "#9ccc65"],
+        ["赤霞橘", "#ff6b6b", "#ff8a80"],
+        ["鲸鱼蓝", "#0066cc", "#3b9eff"]
+      ].map(s => `
+        <div class="swatch">
+          <div class="swatch-color" style="--a:${s[1]};--b:${s[2]}"></div>
+          <span>${s[0]}</span>
+        </div>`).join("");
+      return windowFrame("tasks", `
+        <section class="page">
+          <div class="page-inner">
+            <div class="header-row">
+              <div>
+                <h1>任务中心</h1>
+                <p class="sub">签到、阅读任务与积分兑换</p>
+              </div>
+            </div>
+            <div class="task-layout">
+              <div>
+                <div class="points-panel">
+                  <h2>当前积分</h2>
+                  <div class="points-value">1,280</div>
+                  <p style="margin-top:12px;font-size:14px;opacity:.92;">连续签到 6 天 · 今日已获得 35 积分</p>
+                </div>
+                <div class="card task-card" style="margin-top:18px;">
+                  <h2>每日任务</h2>
+                  ${tasks}
+                </div>
+              </div>
+              <div class="card" style="padding:18px;">
+                <div class="section-title" style="margin:0 0 4px;"><h2>外观配色</h2><div class="muted">8 种主题</div></div>
+                <div class="swatches">${swatches}</div>
+              </div>
+            </div>
+          </div>
+        </section>`);
+    }
+
+    function heroArt() {
+      return `
+        <div class="hero-art">
+          <div class="ribbon" style="--x:-260px;--y:154px;--r:-28deg"></div>
+          <div class="ribbon" style="--x:1050px;--y:824px;--r:-24deg"></div>
+          <div class="focus"></div>
+          <div class="sheet" style="--x:618px;--y:166px;--w:640px;--h:760px;--r:-4deg"></div>
+          <div class="book" style="--x:284px;--y:260px;--w:260px;--h:360px;--r:-12deg;--a:#21141d;--b:#e23a6d"></div>
+          <div class="book" style="--x:1326px;--y:260px;--w:260px;--h:360px;--r:11deg;--a:#4a90d9;--b:#4ecdc4"></div>
+          <div class="book" style="--x:360px;--y:690px;--w:210px;--h:290px;--r:8deg;--a:#9b8dff;--b:#ffd6e3"></div>
+          <div class="book" style="--x:1358px;--y:674px;--w:220px;--h:300px;--r:-8deg;--a:#ff8a50;--b:#f8c85c"></div>
+          <div class="sheet" style="--x:136px;--y:58px;--w:230px;--h:310px;--r:14deg"></div>
+          <div class="sheet" style="--x:1540px;--y:86px;--w:250px;--h:330px;--r:-13deg"></div>
+          <div class="caption-safe"></div>
+        </div>`;
+    }
+
+    const pages = {
+      home: homePage,
+      detail: detailPage,
+      reader: readerPage,
+      bookshelf: bookshelfPage,
+      tasks: tasksPage,
+      hero: heroArt
+    };
+
+    root.innerHTML = (pages[shot] || pages.home)();
+  </script>
+</body>
+</html>

@@ -244,9 +244,27 @@
                             x:Name="BannerPipsPager"
                             VerticalAlignment="Bottom"
                             HorizontalAlignment="Center"
-                            Margin="0,0,0,8"
+                            Margin="0,0,0,42"
                             NumberOfPages="{x:Bind ViewModel.Banners.Count, Mode=OneWay}"
-                            SelectedPageIndex="{Binding ElementName=BannerFlipView, Path=SelectedIndex, Mode=TwoWay}" />
+                            SelectedPageIndex="{Binding ElementName=BannerFlipView, Path=SelectedIndex, Mode=TwoWay}">
+                            <PipsPager.Resources>
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBackground" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBackgroundPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBackgroundPressed" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBackgroundSelected" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBackgroundDisabled" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBorderBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBorderBrushPointerOver" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBorderBrushPressed" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBorderBrushSelected" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorBorderBrushDisabled" Color="Transparent" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorForeground" Color="#B32B1420" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorForegroundPointerOver" Color="#E62B1420" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorForegroundPressed" Color="#FF2B1420" />
+                                <SolidColorBrush x:Key="PipsPagerSelectionIndicatorForegroundSelected" Color="#FF2B1420" />
+                                <Thickness x:Key="PipsPagerButtonBorderThickness">0</Thickness>
+                            </PipsPager.Resources>
+                        </PipsPager>
                     </Grid>
                 </Grid>
 

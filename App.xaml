@@ -86,7 +86,43 @@
                     <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#2B1420" />
                     <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#80566A" />
                     <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#664052" />
-                    <SolidColorBrush x:Key="SakuraBannerCaptionBackgroundBrush" Color="#EFFFF7FA" />
+                    <SolidColorBrush x:Key="ScrollBarBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBackgroundDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarForeground" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBorderBrushDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackgroundPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackgroundDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrushPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrushDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackFill" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackFillDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackStroke" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackStrokePointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackStrokeDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarThumbBackground" Color="#6680566A" />
+                    <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#6680566A" />
+                    <SolidColorBrush x:Key="ScrollBarPanningThumbBackgroundDisabled" Color="#3380566A" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFill" Color="#6680566A" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#9980566A" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="#B380566A" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFillDisabled" Color="#3380566A" />
+                    <SolidColorBrush x:Key="ScrollBarThumbBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollViewerScrollBarSeparatorBackground" Color="Transparent" />
+                    <x:Double x:Key="ScrollBarThumbStrokeThickness">0</x:Double>
+                    <x:Double x:Key="ScrollBarTrackBorderThemeThickness">0</x:Double>
+                    <Thickness x:Key="ScrollViewerScrollBarMargin">0</Thickness>
+                    <Thickness x:Key="ScrollViewScrollBarsMargin">0</Thickness>
+                    <Color x:Key="ScrollBarThumbBackgroundColor">#6680566A</Color>
+                    <Color x:Key="ScrollBarPanningThumbBackgroundColor">#6680566A</Color>
+                    <SolidColorBrush x:Key="SakuraBannerCaptionBackgroundBrush" Color="#99FFF7FA" />
                     <SolidColorBrush x:Key="ContinueReadingBarBackgroundBrush" Color="#D9FFF8FB" />
                     <SolidColorBrush x:Key="ContinueReadingBarPointerOverBackgroundBrush" Color="#EFFFF0F6" />
                     <LinearGradientBrush x:Key="SakuraMicaOverlayBrush" StartPoint="0,0" EndPoint="1,1">
@@ -160,7 +196,43 @@
                     <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#33E23A6D" />
                     <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#40E23A6D" />
                     <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#E23A6D" />
-                    <SolidColorBrush x:Key="SakuraBannerCaptionBackgroundBrush" Color="#E621141D" />
+                    <SolidColorBrush x:Key="ScrollBarBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBackgroundDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarForeground" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarBorderBrushDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackgroundPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBackgroundDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrushPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarButtonBorderBrushDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackFill" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackFillPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackFillDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackStroke" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackStrokePointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarTrackStrokeDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollBarThumbBackground" Color="#66E7B8C8" />
+                    <SolidColorBrush x:Key="ScrollBarPanningThumbBackground" Color="#66E7B8C8" />
+                    <SolidColorBrush x:Key="ScrollBarPanningThumbBackgroundDisabled" Color="#33E7B8C8" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFill" Color="#66E7B8C8" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPointerOver" Color="#99E7B8C8" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFillPressed" Color="#B3E7B8C8" />
+                    <SolidColorBrush x:Key="ScrollBarThumbFillDisabled" Color="#33E7B8C8" />
+                    <SolidColorBrush x:Key="ScrollBarThumbBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="ScrollViewerScrollBarSeparatorBackground" Color="Transparent" />
+                    <x:Double x:Key="ScrollBarThumbStrokeThickness">0</x:Double>
+                    <x:Double x:Key="ScrollBarTrackBorderThemeThickness">0</x:Double>
+                    <Thickness x:Key="ScrollViewerScrollBarMargin">0</Thickness>
+                    <Thickness x:Key="ScrollViewScrollBarsMargin">0</Thickness>
+                    <Color x:Key="ScrollBarThumbBackgroundColor">#66E7B8C8</Color>
+                    <Color x:Key="ScrollBarPanningThumbBackgroundColor">#66E7B8C8</Color>
+                    <SolidColorBrush x:Key="SakuraBannerCaptionBackgroundBrush" Color="#9921141D" />
                     <SolidColorBrush x:Key="ContinueReadingBarBackgroundBrush" Color="#D92A1B25" />
                     <SolidColorBrush x:Key="ContinueReadingBarPointerOverBackgroundBrush" Color="#EF3A2633" />
                     <LinearGradientBrush x:Key="SakuraMicaOverlayBrush" StartPoint="0,0" EndPoint="1,1">

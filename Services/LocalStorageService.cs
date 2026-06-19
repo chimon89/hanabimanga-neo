@@ -62,13 +62,13 @@ namespace hanabimanga.Services
                 _settings = new LocalAppSettings();
             }
 
-            _settings.PreloadPageCount = Math.Clamp(_settings.PreloadPageCount, 0, 10);
+            _settings.PreloadPageCount = Math.Clamp(_settings.PreloadPageCount, 6, 10);
             return CloneSettings(_settings);
         }
 
         public async Task SaveSettingsAsync(LocalAppSettings settings)
         {
-            settings.PreloadPageCount = Math.Clamp(settings.PreloadPageCount, 0, 10);
+            settings.PreloadPageCount = Math.Clamp(settings.PreloadPageCount, 6, 10);
             _settings = CloneSettings(settings);
             Directory.CreateDirectory(_rootPath);
             var json = JsonConvert.SerializeObject(_settings, Formatting.Indented);

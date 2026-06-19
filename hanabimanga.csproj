@@ -45,6 +45,9 @@
 
   <ItemGroup>
     <Content Include="Assets\*.png" />
+    <Content Include="Assets\*.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Assets\avatar\*.webp" />
     <Content Include="Assets\banner\*.webp" />
     <Content Include="Assets\badge\*.png" />
@@ -86,7 +89,7 @@
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
     <PublishTrimmed>False</PublishTrimmed>
     <DefaultLanguage>zh-CN</DefaultLanguage>
-    <PackageCertificateThumbprint>09F368250E4101985C18DA6555C7A4BAD2E2E6A5</PackageCertificateThumbprint>
+    <PackageCertificateThumbprint>16E5059E314847A9BDD6BA06C8211AB8288970F6</PackageCertificateThumbprint>
     <AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
     <GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
     <GenerateAppInstallerFile>False</GenerateAppInstallerFile>

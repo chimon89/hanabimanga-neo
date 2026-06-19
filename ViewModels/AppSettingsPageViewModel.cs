@@ -89,8 +89,11 @@ namespace hanabimanga.ViewModels
         public bool EnableReaderCache => _settings.EnableReaderCache;
         public bool EnableReaderPreload => _settings.EnableReaderPreload;
         public bool CanUsePreload => EnableReaderCache;
-        public double PreloadPageCountValue => _settings.PreloadPageCount;
-        public string PreloadPageCountText => $"{_settings.PreloadPageCount} 页";
+        public bool ShowReaderPreloadSettings => EnableReaderCache;
+        public bool ShowPreloadPageCount => EnableReaderCache && EnableReaderPreload;
+        public string ReaderCacheStateText => EnableReaderCache ? "开启" : "关闭";
+        public string ReaderPreloadStateText => EnableReaderPreload ? "开启" : "关闭";
+        public int PreloadPageCountSelectedIndex => Math.Clamp(_settings.PreloadPageCount, 6, 10) - 6;
         public int ReaderViewModeSelectedIndex => _settings.ReaderViewMode == "waterfall" ? 1 : 0;
 
         public int ApiEndpointSelectedIndex => _settings.ApiEndpoint switch
@@ -184,7 +187,7 @@ namespace hanabimanga.ViewModels
 
         public async Task SetPreloadPageCountAsync(int value)
         {
-            value = Math.Clamp(value, 1, 8);
+            value = Math.Clamp(value, 6, 10);
             if (_settings.PreloadPageCount == value) return;
 
             _settings.PreloadPageCount = value;
@@ -361,8 +364,11 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(EnableReaderCache));
             OnPropertyChanged(nameof(EnableReaderPreload));
             OnPropertyChanged(nameof(CanUsePreload));
-            OnPropertyChanged(nameof(PreloadPageCountValue));
-            OnPropertyChanged(nameof(PreloadPageCountText));
+            OnPropertyChanged(nameof(ShowReaderPreloadSettings));
+            OnPropertyChanged(nameof(ShowPreloadPageCount));
+            OnPropertyChanged(nameof(ReaderCacheStateText));
+            OnPropertyChanged(nameof(ReaderPreloadStateText));
+            OnPropertyChanged(nameof(PreloadPageCountSelectedIndex));
             OnPropertyChanged(nameof(ReaderViewModeSelectedIndex));
             OnPropertyChanged(nameof(ApiEndpointSelectedIndex));
             OnPropertyChanged(nameof(ActiveEndpointText));

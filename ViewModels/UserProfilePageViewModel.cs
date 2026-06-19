@@ -27,6 +27,7 @@ namespace hanabimanga.ViewModels
         public string JoinedText => Profile.JoinedText;
         public string StatsText => Profile.StatsText;
         public bool IsSelf => Profile.IsSelf;
+        public bool IsEmailVerified => Profile.IsEmailVerified;
         public bool HasProfile => _document != null;
         public bool HasTimeline => Timeline.Count > 0;
         public bool HasNoTimeline => !IsLoading && HasProfile && Timeline.Count == 0;
@@ -128,6 +129,7 @@ namespace hanabimanga.ViewModels
             OnPropertyChanged(nameof(JoinedText));
             OnPropertyChanged(nameof(StatsText));
             OnPropertyChanged(nameof(IsSelf));
+            OnPropertyChanged(nameof(IsEmailVerified));
             OnPropertyChanged(nameof(HasProfile));
             OnPropertyChanged(nameof(HasTimeline));
             OnPropertyChanged(nameof(HasNoTimeline));

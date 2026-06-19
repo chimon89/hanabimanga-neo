@@ -13,29 +13,103 @@ namespace hanabimanga.Services
 
         private readonly object _syncRoot = new();
         private TaskCenterDocument _document;
+        private bool _hasRemoteDocument;
+        private string? _cachedUserId;
+        private Task<TaskCenterDocument?>? _preloadTask;
 
         private TaskCenterService()
         {
             _document = CreateSeedDocument();
         }
 
-        public Task<TaskCenterDocument> GetTaskCenterAsync()
+        public async Task PreloadAsync()
         {
-            return GetTaskCenterCoreAsync();
-        }
+            if (!SupabaseService.Instance.IsSignedIn)
+            {
+                ClearCache();
+                return;
+            }
 
-        private async Task<TaskCenterDocument> GetTaskCenterCoreAsync()
-        {
+            var userId = SupabaseService.Instance.CurrentUserId;
+            lock (_syncRoot)
+            {
+                if (!string.Equals(_cachedUserId, userId, StringComparison.Ordinal))
+                {
+                    _document = CreateSeedDocument();
+                    _hasRemoteDocument = false;
+                    _cachedUserId = userId;
+                    _preloadTask = null;
+                }
+
+                if (_preloadTask is { IsCompleted: false })
+                {
+                    return;
+                }
+
+                _preloadTask = FetchAndCacheRemoteAsync();
+            }
+
             try
             {
-                var remoteDocument = await SupabaseService.Instance.GetCurrentUserTaskCenterAsync();
-                if (remoteDocument != null)
+                await _preloadTask;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[task-center] preload failed: {ex.Message}");
+            }
+        }
+
+        public Task<TaskCenterDocument> GetTaskCenterAsync(bool preferCached = false)
+        {
+            return GetTaskCenterCoreAsync(preferCached);
+        }
+
+        public void ClearCache()
+        {
+            lock (_syncRoot)
+            {
+                _document = CreateSeedDocument();
+                _hasRemoteDocument = false;
+                _cachedUserId = null;
+                _preloadTask = null;
+            }
+        }
+
+        private async Task<TaskCenterDocument> GetTaskCenterCoreAsync(bool preferCached)
+        {
+            if (preferCached)
+            {
+                Task<TaskCenterDocument?>? preloadTask;
+                lock (_syncRoot)
                 {
-                    lock (_syncRoot)
+                    if (_hasRemoteDocument)
                     {
-                        _document = Clone(remoteDocument);
+                        RefreshStoreAffordability(_document);
+                        return Clone(_document);
                     }
 
+                    preloadTask = _preloadTask;
+                }
+
+                if (preloadTask is { IsCompleted: false })
+                {
+                    try
+                    {
+                        var warmed = await preloadTask;
+                        if (warmed != null) return Clone(warmed);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[task-center] awaiting preload failed: {ex.Message}");
+                    }
+                }
+            }
+
+            try
+            {
+                var remoteDocument = await FetchAndCacheRemoteAsync();
+                if (remoteDocument != null)
+                {
                     return remoteDocument;
                 }
             }
@@ -55,11 +129,27 @@ namespace hanabimanga.Services
             }
         }
 
+        private async Task<TaskCenterDocument?> FetchAndCacheRemoteAsync()
+        {
+            var remoteDocument = await SupabaseService.Instance.GetCurrentUserTaskCenterAsync();
+            if (remoteDocument != null)
+            {
+                lock (_syncRoot)
+                {
+                    _document = Clone(remoteDocument);
+                    _hasRemoteDocument = true;
+                    _cachedUserId = SupabaseService.Instance.CurrentUserId;
+                }
+            }
+
+            return remoteDocument;
+        }
+
         public async Task<TaskCenterDocument> ClaimDailySignInAsync()
         {
             await SupabaseService.Instance.ClaimCheckinRewardAsync();
             // 签到结果与积分以服务器为准,领取后重新拉取完整的任务中心文档。
-            return await GetTaskCenterCoreAsync();
+            return await GetTaskCenterCoreAsync(preferCached: false);
         }
 
         public Task<TaskCenterDocument> RedeemAsync(string itemId)
@@ -293,6 +383,12 @@ namespace hanabimanga.Services
                 SpentPoints = source.SpentPoints,
                 SignInStreak = source.SignInStreak,
                 HasSignedInToday = source.HasSignedInToday,
+                IsPermanentVip = source.IsPermanentVip,
+                InviteCode = source.InviteCode,
+                InvitedCount = source.InvitedCount,
+                SuccessfulInviteCount = source.SuccessfulInviteCount,
+                PendingCheckinInviteCount = source.PendingCheckinInviteCount,
+                InvitePoints = source.InvitePoints,
                 SignInDays = source.SignInDays.Select(day => new TaskCenterSignInDay
                 {
                     Label = day.Label,
@@ -318,12 +414,22 @@ namespace hanabimanga.Services
                     Title = item.Title,
                     Description = item.Description,
                     Points = item.Points,
+                    Price = item.Price,
+                    DurationDays = item.DurationDays,
                     Stock = item.Stock,
                     ImageUrl = item.ImageUrl,
                     IconGlyph = item.IconGlyph,
                     AvailablePoints = source.Points,
                 }).ToList(),
                 ExchangeRecords = source.ExchangeRecords.Select(record => new ExchangeRecord
+                {
+                    Id = record.Id,
+                    Title = record.Title,
+                    Points = record.Points,
+                    CreatedAt = record.CreatedAt,
+                    StatusText = record.StatusText,
+                }).ToList(),
+                InviteRecords = source.InviteRecords.Select(record => new InviteRewardRecord
                 {
                     Id = record.Id,
                     Title = record.Title,

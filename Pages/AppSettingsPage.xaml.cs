@@ -2,7 +2,6 @@ using System;
 using hanabimanga.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Navigation;
 
 namespace hanabimanga.Pages
@@ -39,12 +38,11 @@ namespace hanabimanga.Pages
             await ViewModel.SetReaderPreloadAsync(toggle.IsOn);
         }
 
-        private async void PreloadPageCountSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        private async void PreloadPageCountComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!ViewModel.IsLoaded) return;
+            if (!ViewModel.IsLoaded || sender is not ComboBox comboBox || comboBox.SelectedIndex < 0) return;
 
-            var value = (int)Math.Round(e.NewValue);
-            await ViewModel.SetPreloadPageCountAsync(value);
+            await ViewModel.SetPreloadPageCountAsync(comboBox.SelectedIndex + 6);
         }
 
         private async void ReaderViewModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)

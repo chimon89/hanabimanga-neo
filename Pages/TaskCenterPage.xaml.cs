@@ -63,5 +63,16 @@ namespace hanabimanga.Pages
         {
             Frame.Navigate(typeof(PointsStorePage));
         }
+
+        private void LongTermTaskButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is not string taskId ||
+                !taskId.Contains("invite", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            Frame.Navigate(typeof(InvitePage));
+        }
     }
 }

@@ -25,7 +25,20 @@ namespace hanabimanga.Models
         [Column("vip_expiration_date")]
         public DateTime? VipExpirationDate { get; set; }
 
+        [Column("invite_code")]
+        public string? InviteCode { get; set; }
+
+        [Column("email_verified_at")]
+        public DateTime? EmailVerifiedAt { get; set; }
+
         [Column("created_at")]
         public DateTime? CreatedAt { get; set; }
+
+        public bool IsEmailVerified => EmailVerifiedAt.HasValue;
+
+        public bool HasActiveVip => VipExpirationDate is { } expiresAt && expiresAt > DateTime.UtcNow;
+
+        public bool IsPermanentVip =>
+            VipExpirationDate is { } expiresAt && expiresAt.Date >= new DateTime(2050, 12, 31);
     }
 }

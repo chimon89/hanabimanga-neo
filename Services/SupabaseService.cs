@@ -20,6 +20,7 @@ using Supabase.Gotrue;
 using Supabase.Gotrue.Exceptions;
 using Supabase.Realtime.PostgresChanges;
 using Client = Supabase.Client;
+using PostgrestException = Supabase.Postgrest.Exceptions.PostgrestException;
 using static Supabase.Postgrest.Constants;
 
 namespace hanabimanga.Services
@@ -38,9 +39,18 @@ namespace hanabimanga.Services
         private string? _readerClientFingerprint;
         private readonly HttpClient _httpClient = new();
         private readonly SemaphoreSlim _initLock = new(1, 1);
+        private readonly object _deviceIdLock = new();
+        private string? _clientDeviceId;
         private Supabase.Realtime.RealtimeChannel? _notificationChannel;
         private string? _notificationSubscriptionUserId;
         private string? _notificationSubscriptionAccessToken;
+        // 业务层邮箱验证状态以 profiles.email_verified_at 为准,auth.users.email_confirmed_at 不可用。
+        // 在 GetCurrentUserProfileAsync 读取到当前用户记录时同步更新;登出时由 SignOutAsync 清空。
+        private DateTime? _currentEmailVerifiedAt;
+        private string? _currentEmailVerifiedUserId;
+        private static readonly string AuthTraceFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "hanabi-auth.log");
 
         public Client Client =>
             _client ?? throw new InvalidOperationException(
@@ -51,6 +61,9 @@ namespace hanabimanga.Services
         public bool IsInitialized => _client is not null;
         public bool IsSignedIn => !string.IsNullOrWhiteSpace(CurrentSession?.AccessToken);
         public string? CurrentUserId => CurrentUser?.Id ?? ReadJwtSubject(CurrentSession?.AccessToken);
+        public string? CurrentEmail => CurrentUser?.Email ?? ReadJwtClaim(CurrentSession?.AccessToken, "email");
+        public bool IsCurrentUserEmailVerified =>
+            _currentEmailVerifiedUserId == CurrentUserId && _currentEmailVerifiedAt.HasValue;
 
         /// <summary>当前生效的接口地址(已去除尾部斜杠)。</summary>
         public string? CurrentUrl => _supabaseUrl;
@@ -418,15 +431,78 @@ namespace hanabimanga.Services
             AuthStateChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        public async Task SignUpAsync(string email, string password)
+        public async Task<UsernameCheckResult> CheckUsernameAvailableAsync(string username)
+        {
+            var normalized = username.Trim();
+            if (normalized.Length < 3 || normalized.Length > 20)
+            {
+                return new UsernameCheckResult
+                {
+                    Available = false,
+                    Reason = "length",
+                };
+            }
+
+            var raw = await PostRpcAsync<JToken>(
+                "check_username_available_v2",
+                new { p_username = normalized },
+                authenticated: false);
+
+            var obj = (raw as JArray)?.FirstOrDefault() as JObject ?? raw as JObject;
+            var result = obj?.ToObject<UsernameCheckResult>();
+            if (result == null)
+            {
+                throw new InvalidOperationException("用户名检查服务无响应,请稍后再试。");
+            }
+
+            return result;
+        }
+
+        public async Task SignUpAsync(
+            string email,
+            string password,
+            string username,
+            string? displayName,
+            string? inviteCode)
         {
             try
             {
-                await Client.Auth.SignUp(email, password);
+                var metadata = new Dictionary<string, object>
+                {
+                    ["username"] = username.Trim(),
+                    ["device_id"] = GetOrCreateClientDeviceId(),
+                };
+
+                if (!string.IsNullOrWhiteSpace(displayName))
+                {
+                    metadata["display_name"] = displayName.Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(inviteCode))
+                {
+                    metadata["inviter_code"] = inviteCode.Trim();
+                }
+
+                TraceAuthSignUp(
+                    "[auth-signup] request: " +
+                    $"endpoint={_supabaseUrl ?? "(null)"}, " +
+                    $"email_domain={GetEmailDomain(email)}, " +
+                    $"metadata_keys={string.Join(",", metadata.Keys.OrderBy(key => key, StringComparer.Ordinal))}");
+
+                var response = await Client.Auth.SignUp(email, password, new SignUpOptions
+                {
+                    Data = metadata,
+                });
+
+                TraceAuthSignUp($"[auth-signup] response: {DescribeAuthResponse(response)}");
             }
             catch (Exception ex)
             {
-                throw ToFriendlyAuthError(ex);
+                TraceAuthSignUp(
+                    "[auth-signup] failed: " +
+                    $"{ex.GetType().Name}: {ex.Message}; " +
+                    $"inner={ex.InnerException?.GetType().Name}: {ex.InnerException?.Message}");
+                throw ToFriendlySignUpError(ex);
             }
         }
 
@@ -446,6 +522,211 @@ namespace hanabimanga.Services
             {
                 throw ToFriendlyAuthError(ex);
             }
+        }
+
+        public async Task<bool> RefreshCurrentUserEmailVerificationAsync()
+        {
+            var userId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                _currentEmailVerifiedAt = null;
+                _currentEmailVerifiedUserId = null;
+                return false;
+            }
+
+            try
+            {
+                // GetCurrentUserProfileAsync 内部会把 EmailVerifiedAt 同步到缓存字段。
+                var profile = await GetCurrentUserProfileAsync(userId);
+                return profile?.IsEmailVerified ?? false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[auth-email] refresh verification failed: {ex.Message}");
+                return IsCurrentUserEmailVerified;
+            }
+        }
+
+        /// <summary>
+        /// 邮箱验证:请求服务端给当前账号的邮箱发送 6 位 OTP 验证码。
+        /// 走独立 Edge Function `request-email-verification`,与 Magic Link 登录解耦,
+        /// 邮件正文只包含验证码,不带任何登录链接。后端同时会拦截一次性/临时邮箱。
+        /// </summary>
+        /// <returns>服务端返回的脱敏邮箱与验证码过期时间,用于 UI 展示。</returns>
+        public async Task<EmailVerificationDispatchResult> SendCurrentEmailVerificationOtpAsync(
+            string? email = null)
+        {
+            // email 参数仅用于校验当前账号有合法邮箱,实际发送目标以服务端 JWT 中的 email 为准。
+            _ = NormalizeCurrentEmail(email);
+
+            var response = await InvokeEmailVerificationFunctionAsync(
+                "request-email-verification",
+                new Dictionary<string, object>());
+
+            string? maskedEmail = null;
+            DateTime? expiresAt = null;
+
+            if (response != null)
+            {
+                if (response.TryGetValue("masked_email", out var maskedRaw) && maskedRaw is string maskedStr)
+                {
+                    maskedEmail = maskedStr;
+                }
+                if (response.TryGetValue("expires_at", out var expiresRaw) &&
+                    expiresRaw is string expiresStr &&
+                    DateTime.TryParse(
+                        expiresStr,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                        out var parsedExpiresAt))
+                {
+                    expiresAt = parsedExpiresAt;
+                }
+            }
+
+            return new EmailVerificationDispatchResult(maskedEmail, expiresAt);
+        }
+
+        /// <summary>
+        /// 邮箱验证:把用户输入的 6 位 OTP 交给 RPC `confirm_email_verification` 核对。
+        /// 校验通过后服务端会把 profiles.email_verified_at 写为当前时间戳,
+        /// 并尝试发放"验证邮箱"任务的积分奖励(返回的 reward 字段记录到账详情)。
+        /// </summary>
+        public async Task<ConfirmEmailVerificationResponse> VerifyCurrentEmailOtpAsync(
+            string token,
+            string? email = null)
+        {
+            _ = NormalizeCurrentEmail(email);
+            var normalizedToken = token.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedToken))
+            {
+                throw new InvalidOperationException("请输入邮箱验证码。");
+            }
+
+            ConfirmEmailVerificationResponse? response;
+            try
+            {
+                _ = GetRequiredAccessToken();
+                response = await Client.Rpc<ConfirmEmailVerificationResponse>(
+                    "confirm_email_verification",
+                    new Dictionary<string, object>
+                    {
+                        ["p_code"] = normalizedToken,
+                    });
+            }
+            catch (PostgrestException ex)
+            {
+                Debug.WriteLine($"[email-otp] confirm_email_verification RPC failed: {ex.Message}; body={ex.Content}");
+                throw new InvalidOperationException(
+                    "验证失败,请稍后重试或重新获取验证码。",
+                    ex);
+            }
+            catch (HttpRequestException ex)
+            {
+                Debug.WriteLine($"[email-otp] confirm_email_verification HTTP failed: {ex.Message}");
+                throw new InvalidOperationException(
+                    "验证失败,请稍后重试或重新获取验证码。",
+                    ex);
+            }
+
+            if (response == null)
+            {
+                throw new InvalidOperationException("验证服务无响应,请稍后重试。");
+            }
+
+            if (!response.IsVerified)
+            {
+                // verified=false 且 already_verified=false:后端在 message 给出失败原因。
+                var failureMessage = string.IsNullOrWhiteSpace(response.Message)
+                    ? "验证码不正确或已过期,请重新获取后再试。"
+                    : response.Message!;
+                throw new InvalidOperationException(failureMessage);
+            }
+
+            // 通过(无论首次 verified 还是 already_verified)都把缓存置为已验证,
+            // 同时回查一次 profiles 拿到权威 email_verified_at 时间戳。
+            _currentEmailVerifiedAt = DateTime.UtcNow;
+            _currentEmailVerifiedUserId = CurrentUserId;
+            _ = RefreshCurrentUserEmailVerificationAsync();
+
+            AuthStateChanged?.Invoke(this, EventArgs.Empty);
+            return response;
+        }
+
+        private async Task<Dictionary<string, object>?> InvokeEmailVerificationFunctionAsync(
+            string functionName,
+            Dictionary<string, object> body)
+        {
+            // request-email-verification 沿用当前会话 JWT;未登录时退回 anon key,
+            // 让后端按 401/403 自行拒绝,避免客户端先做权限判断与后端规则发生分歧。
+            var token = CurrentSession?.AccessToken ?? _supabaseAnonKey;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("SupabaseService 尚未初始化,无法调用邮箱验证接口。");
+            }
+
+            string responseBody;
+            try
+            {
+                responseBody = await Client.Functions.Invoke(
+                    functionName,
+                    token,
+                    new Supabase.Functions.Client.InvokeFunctionOptions
+                    {
+                        Body = body,
+                    });
+            }
+            catch (Supabase.Functions.Exceptions.FunctionsException ex)
+            {
+                var bodyText = ex.Content ?? "";
+                Debug.WriteLine($"[email-otp] {functionName} exception: {ex.Message}; body={bodyText}");
+                throw new InvalidOperationException(
+                    TranslateEmailVerificationError(bodyText),
+                    ex);
+            }
+
+            Debug.WriteLine($"[email-otp] {functionName}\n{responseBody}");
+            if (string.IsNullOrWhiteSpace(responseBody))
+            {
+                return null;
+            }
+
+            try
+            {
+                return JsonConvert.DeserializeObject<Dictionary<string, object>>(responseBody);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[email-otp] {functionName} parse failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        // request-email-verification 失败响应模型为 EdgeFunctionError: { "error": "...", "message": "..." }。
+        // 优先展示后端给的 message,否则按 error 关键字给一份保底中文文案。
+        private static string TranslateEmailVerificationError(string bodyText)
+        {
+            if (!string.IsNullOrWhiteSpace(bodyText))
+            {
+                try
+                {
+                    var parsed = JsonConvert.DeserializeObject<Dictionary<string, object>>(bodyText);
+                    if (parsed != null)
+                    {
+                        var message = parsed.TryGetValue("message", out var m) ? m?.ToString() : null;
+                        if (!string.IsNullOrWhiteSpace(message)) return message!;
+
+                        var errorKey = parsed.TryGetValue("error", out var e) ? e?.ToString() : null;
+                        if (!string.IsNullOrWhiteSpace(errorKey)) return errorKey!;
+                    }
+                }
+                catch
+                {
+                    // 不是 JSON,落到默认文案。
+                }
+            }
+
+            return "验证码发送失败,请稍后重试。";
         }
 
         /// <summary>
@@ -519,6 +800,20 @@ namespace hanabimanga.Services
                 _ => Constants.EmailOtpType.Email,
             };
 
+        private string NormalizeCurrentEmail(string? email)
+        {
+            var normalizedEmail = string.IsNullOrWhiteSpace(email)
+                ? CurrentEmail
+                : email.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedEmail))
+            {
+                throw new InvalidOperationException("当前账号缺少邮箱地址,无法发送验证码。");
+            }
+
+            return normalizedEmail!;
+        }
+
+
         private static Dictionary<string, string> ParseUrlParameters(string? raw)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -555,6 +850,9 @@ namespace hanabimanga.Services
                 throw ToFriendlyAuthError(ex);
             }
 
+            _currentEmailVerifiedAt = null;
+            _currentEmailVerifiedUserId = null;
+
             AuthStateChanged?.Invoke(this, EventArgs.Empty);
         }
 
@@ -588,6 +886,145 @@ namespace hanabimanga.Services
             }
 
             return new InvalidOperationException(message, ex);
+        }
+
+        private static InvalidOperationException ToFriendlySignUpError(Exception ex)
+        {
+            var raw = FlattenExceptionMessage(ex).ToLowerInvariant();
+            if (raw.Contains("user already registered", StringComparison.Ordinal) ||
+                raw.Contains("already registered", StringComparison.Ordinal))
+            {
+                return new InvalidOperationException("该邮箱已注册,请直接登录。", ex);
+            }
+
+            if ((raw.Contains("profiles_username_key", StringComparison.Ordinal) ||
+                 raw.Contains("unique_violation", StringComparison.Ordinal)) &&
+                raw.Contains("username", StringComparison.Ordinal))
+            {
+                return new InvalidOperationException("用户名已被占用,请换一个。", ex);
+            }
+
+            return ToFriendlyAuthError(ex);
+        }
+
+        private static string FlattenExceptionMessage(Exception ex)
+        {
+            var builder = new StringBuilder();
+            for (var current = ex; current != null; current = current.InnerException)
+            {
+                if (builder.Length > 0) builder.Append(' ');
+                builder.Append(current.Message);
+            }
+
+            return builder.ToString();
+        }
+
+        private static string GetEmailDomain(string email)
+        {
+            var at = email.LastIndexOf('@');
+            return at >= 0 && at < email.Length - 1
+                ? email[(at + 1)..].Trim().ToLowerInvariant()
+                : "(invalid)";
+        }
+
+        private string GetOrCreateClientDeviceId()
+        {
+            if (!string.IsNullOrWhiteSpace(_clientDeviceId)) return _clientDeviceId!;
+
+            lock (_deviceIdLock)
+            {
+                if (!string.IsNullOrWhiteSpace(_clientDeviceId)) return _clientDeviceId!;
+
+                var path = GetClientDeviceIdPath();
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        var existing = File.ReadAllText(path, Encoding.UTF8).Trim();
+                        if (!string.IsNullOrWhiteSpace(existing))
+                        {
+                            _clientDeviceId = existing;
+                            return _clientDeviceId;
+                        }
+                    }
+
+                    _clientDeviceId = Guid.NewGuid().ToString("N");
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    File.WriteAllText(path, _clientDeviceId, Encoding.UTF8);
+                    return _clientDeviceId;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[auth-signup] device id persistence failed: {ex.Message}");
+                    _clientDeviceId = Guid.NewGuid().ToString("N");
+                    return _clientDeviceId;
+                }
+            }
+        }
+
+        private static string GetClientDeviceIdPath()
+        {
+            try
+            {
+                return Path.Combine(
+                    Windows.Storage.ApplicationData.Current.LocalFolder.Path,
+                    "auth-device-id.txt");
+            }
+            catch
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "hanabimanga",
+                    "auth-device-id.txt");
+            }
+        }
+
+        private static void TraceAuthSignUp(string message)
+        {
+            Debug.WriteLine(message);
+            try
+            {
+                File.AppendAllText(
+                    AuthTraceFile,
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}",
+                    Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[auth-signup] trace write failed: {ex.Message}");
+            }
+        }
+
+        private static string DescribeAuthResponse(object? response)
+        {
+            if (response == null) return "null";
+
+            var type = response.GetType();
+            var user = type.GetProperty("User")?.GetValue(response);
+            var accessToken = type.GetProperty("AccessToken")?.GetValue(response) as string;
+            var refreshToken = type.GetProperty("RefreshToken")?.GetValue(response) as string;
+
+            var userType = user?.GetType();
+            var userId = userType?.GetProperty("Id")?.GetValue(user)?.ToString();
+            var userEmail = userType?.GetProperty("Email")?.GetValue(user)?.ToString();
+            var emailConfirmedAt = userType?.GetProperty("EmailConfirmedAt")?.GetValue(user)?.ToString();
+
+            return
+                $"type={type.FullName}, " +
+                $"has_user={user != null}, " +
+                $"user_id={RedactMiddle(userId)}, " +
+                $"user_email_domain={GetEmailDomain(userEmail ?? "")}, " +
+                $"email_confirmed_at={(string.IsNullOrWhiteSpace(emailConfirmedAt) ? "(null)" : "present")}, " +
+                $"has_access_token={!string.IsNullOrWhiteSpace(accessToken)}, " +
+                $"has_refresh_token={!string.IsNullOrWhiteSpace(refreshToken)}";
+        }
+
+        private static string RedactMiddle(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "(null)";
+            if (value.Length <= 8) return "***";
+
+            return $"{value[..4]}...{value[^4..]}";
         }
 
         public async Task<Announcement?> GetAnnouncementAsync(string announcementId)
@@ -625,7 +1062,15 @@ namespace hanabimanga.Services
                 $"display_name={profile?.DisplayName ?? "(null)"}, " +
                 $"avatar_url={profile?.AvatarUrl ?? "(null)"}, " +
                 $"banner_url={profile?.BannerUrl ?? "(null)"}, " +
-                $"vip_expiration_date={profile?.VipExpirationDate?.ToString("O") ?? "(null)"}");
+                $"vip_expiration_date={profile?.VipExpirationDate?.ToString("O") ?? "(null)"}, " +
+                $"email_verified_at={profile?.EmailVerifiedAt?.ToString("O") ?? "(null)"}");
+
+            // 当前用户的邮箱验证状态以 profiles.email_verified_at 为准,缓存供 IsCurrentUserEmailVerified 同步访问。
+            if (profile != null && string.Equals(profile.Id, CurrentUserId, StringComparison.Ordinal))
+            {
+                _currentEmailVerifiedAt = profile.EmailVerifiedAt;
+                _currentEmailVerifiedUserId = profile.Id;
+            }
 
             return profile;
         }
@@ -682,6 +1127,8 @@ namespace hanabimanga.Services
                 () => GetAuthenticatedRestRecordsAsync<RawUserTaskProgressRecord>(
                     "user_task_progress?select=user_id,task_id,period_key" +
                     $"&user_id=eq.{escapedUserId}&limit=500"));
+            var profile = await TryGetTaskCenterRecordAsync(
+                () => GetCurrentUserProfileAsync(userId!));
             var todayComments = await TryGetTaskCenterRecordsAsync(
                 () => GetAuthenticatedRestRecordsAsync<RawCommentRecord>(
                     "comments?select=id,created_at" +
@@ -717,7 +1164,8 @@ namespace hanabimanga.Services
                 products,
                 todayComments.Count,
                 Math.Clamp(todayReadProgress, 0, 20),
-                checkinPreview);
+                checkinPreview,
+                profile);
         }
 
         private async Task<RawCheckinWeekPreview?> GetCheckinWeekPreviewAsync()
@@ -1319,7 +1767,7 @@ namespace hanabimanga.Services
             var escapedUserId = Uri.EscapeDataString(normalizedUserId);
             var profileTask = GetSingleRestRecordAsync<RawUserProfileRecord>(
                 "profiles",
-                "id,username,display_name,avatar_url,banner_url,created_at",
+                "id,username,display_name,avatar_url,banner_url,email_verified_at,created_at",
                 $"id=eq.{escapedUserId}");
             var commentsTask = GetRestRecordsWithOptionalAuthAsync<RawCommentRecord>(
                 "comments?select=id,user_id,comic_id,chapter_id,parent_id,content,status,is_spoiler,like_count,reply_count,created_at,updated_at" +
@@ -1414,6 +1862,16 @@ namespace hanabimanga.Services
                 });
             }
 
+            var isSelf = string.Equals(CurrentUserId, profile.Id, StringComparison.Ordinal);
+
+            // 看自己页面时顺手把当前用户的 email 验证状态写入缓存,
+            // 让顶部账户面板这次刷新后也能立即拿到准确的徽标状态。
+            if (isSelf)
+            {
+                _currentEmailVerifiedAt = profile.EmailVerifiedAt;
+                _currentEmailVerifiedUserId = profile.Id;
+            }
+
             return new UserProfileDocument
             {
                 Profile = new UserProfileHeader
@@ -1426,7 +1884,8 @@ namespace hanabimanga.Services
                     AvatarUrl = profile.AvatarUrl,
                     BannerUrl = profile.BannerUrl,
                     CreatedAt = profile.CreatedAt,
-                    IsSelf = string.Equals(CurrentUser?.Id, profile.Id, StringComparison.Ordinal),
+                    IsSelf = isSelf,
+                    IsEmailVerified = profile.EmailVerifiedAt.HasValue,
                     CommentCount = commentRows.Count,
                     FavoriteCount = favoriteRows.Count,
                     LikeCount = likeRows.Count,
@@ -2170,6 +2629,73 @@ namespace hanabimanga.Services
                 ?? new RawReaderImageResponse();
         }
 
+        private async Task<T?> InvokePaymentFunctionAsync<T>(
+            string functionName,
+            Dictionary<string, object> body)
+        {
+            if (string.IsNullOrWhiteSpace(_supabaseUrl) || string.IsNullOrWhiteSpace(_supabaseAnonKey))
+            {
+                throw new InvalidOperationException("SupabaseService 尚未初始化,无法访问支付系统。");
+            }
+
+            var token = GetRequiredAccessToken();
+            string responseBody;
+            try
+            {
+                responseBody = await Client.Functions.Invoke(
+                    functionName,
+                    token,
+                    new Supabase.Functions.Client.InvokeFunctionOptions
+                    {
+                        Body = body,
+                    });
+            }
+            catch (Supabase.Functions.Exceptions.FunctionsException ex)
+            {
+                var bodyText = ex.Content ?? "";
+                Debug.WriteLine($"[payment] {functionName} exception: {ex.Message}; body={bodyText}");
+                throw new InvalidOperationException(
+                    TryReadPaymentError(bodyText) ?? "支付接口暂时不可用,请稍后重试。",
+                    ex);
+            }
+
+            Debug.WriteLine($"[payment] {functionName}\n{responseBody}");
+            return string.IsNullOrWhiteSpace(responseBody)
+                ? default
+                : JsonConvert.DeserializeObject<T>(responseBody);
+        }
+
+        private static PaymentOrder MapPaymentOrder(RawPaymentOrderData data)
+            => new()
+            {
+                Id = data.Id ?? data.OrderId ?? "",
+                TradeNo = data.TradeNo ?? "",
+                HypayTradeNo = data.HypayTradeNo,
+                Amount = data.Amount,
+                Status = string.IsNullOrWhiteSpace(data.Status) ? "pending" : data.Status!,
+                PayUrl = string.IsNullOrWhiteSpace(data.PayUrl) ? data.PayInfo : data.PayUrl,
+                PaidAt = data.PaidAt,
+                ProductSnapshot = data.ProductSnapshot,
+                Synced = data.Synced == true,
+            };
+
+        private static string? TryReadPaymentError(string bodyText)
+        {
+            if (string.IsNullOrWhiteSpace(bodyText)) return null;
+
+            try
+            {
+                var obj = JObject.Parse(bodyText);
+                return obj["error"]?.ToString()
+                    ?? obj["message"]?.ToString()
+                    ?? obj["msg"]?.ToString();
+            }
+            catch
+            {
+                return bodyText.Length <= 160 ? bodyText : null;
+            }
+        }
+
         private static bool TryParseReaderError(string bodyText, out string errorCode)
         {
             errorCode = "";
@@ -2302,6 +2828,19 @@ namespace hanabimanga.Services
             }
         }
 
+        private static async Task<T?> TryGetTaskCenterRecordAsync<T>(Func<Task<T?>> loader)
+        {
+            try
+            {
+                return await loader();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[task-center] record probe failed: {ex.Message}");
+                return default;
+            }
+        }
+
         private static TaskCenterDocument BuildTaskCenterDocument(
             string userId,
             List<RawPointLedgerRecord> ledgerRows,
@@ -2310,11 +2849,14 @@ namespace hanabimanga.Services
             List<RawPointProductRecord> products,
             int todayCommentCount,
             int todayReadProgress,
-            RawCheckinWeekPreview? checkinPreview)
+            RawCheckinWeekPreview? checkinPreview,
+            UserProfile? profile)
         {
             var document = new TaskCenterDocument();
             var now = DateTime.Now;
             var today = now.Date;
+            document.IsPermanentVip = profile?.IsPermanentVip == true;
+            document.InviteCode = profile?.InviteCode?.Trim() ?? "";
             var ledger = ledgerRows
                 .Where(row => string.IsNullOrWhiteSpace(userId) ||
                     string.Equals(row.UserId, userId, StringComparison.OrdinalIgnoreCase))
@@ -2361,6 +2903,20 @@ namespace hanabimanga.Services
                     StatusText = "已兑换",
                 })
                 .ToList();
+            document.InviteRecords = ledger
+                .Where(row => row.Amount > 0 && IsInviteReason(row.Reason))
+                .Select(row => new InviteRewardRecord
+                {
+                    Id = row.Id.ToString(CultureInfo.InvariantCulture),
+                    Title = "邀请好友奖励",
+                    Points = row.Amount,
+                    CreatedAt = row.CreatedAt ?? DateTime.UtcNow,
+                })
+                .ToList();
+            document.SuccessfulInviteCount = document.InviteRecords.Count;
+            document.InvitedCount = document.SuccessfulInviteCount;
+            document.PendingCheckinInviteCount = 0;
+            document.InvitePoints = document.InviteRecords.Sum(record => record.Points);
 
             var tasks = BuildTaskItems(taskDefinitions, progressRows, todayCommentCount, todayReadProgress);
             document.DailyTasks = tasks.Where(task => task.Category == "daily").Select(task => task.Item).ToList();
@@ -2566,8 +3122,10 @@ namespace hanabimanga.Services
                         Id = string.IsNullOrWhiteSpace(product.Id) ? $"vip-{days}" : product.Id!,
                         Category = "virtual",
                         Title = string.IsNullOrWhiteSpace(product.Name) ? $"{days} 天 VIP" : product.Name!,
-                        Description = $"使用 {points} 积分兑换 {days} 天 VIP 会员",
+                        Description = $"购买 {days} 天 VIP 会员",
                         Points = points,
+                        Price = product.Price,
+                        DurationDays = days,
                         Stock = product.StockLimit is { } stockLimit
                             ? Math.Max(0, stockLimit - (product.SalesCount ?? 0))
                             : 0,
@@ -2811,6 +3369,14 @@ namespace hanabimanga.Services
             return normalized.Contains("exchange", StringComparison.Ordinal) ||
                 normalized.Contains("redeem", StringComparison.Ordinal) ||
                 normalized.Contains("兑换", StringComparison.Ordinal);
+        }
+
+        private static bool IsInviteReason(string? reason)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) return false;
+            var normalized = reason.ToLowerInvariant();
+            return normalized.Contains("invite", StringComparison.Ordinal) ||
+                normalized.Contains("邀请", StringComparison.Ordinal);
         }
 
         private static string FormatLedgerReason(string? reason)
@@ -3112,8 +3678,12 @@ namespace hanabimanga.Services
         }
 
         private static string? ReadJwtSubject(string? accessToken)
+            => ReadJwtClaim(accessToken, "sub");
+
+        private static string? ReadJwtClaim(string? accessToken, string claimName)
         {
             if (string.IsNullOrWhiteSpace(accessToken)) return null;
+            if (string.IsNullOrWhiteSpace(claimName)) return null;
 
             try
             {
@@ -3124,12 +3694,70 @@ namespace hanabimanga.Services
                 payload = payload.PadRight(payload.Length + ((4 - payload.Length % 4) % 4), '=');
 
                 var json = JObject.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
-                return json.Value<string>("sub");
+                return json.Value<string>(claimName);
             }
             catch
             {
                 return null;
             }
+        }
+
+        public async Task<PaymentOrder> CreatePaymentOrderAsync(
+            string productId,
+            string payType = "wxpay")
+        {
+            if (string.IsNullOrWhiteSpace(productId))
+            {
+                throw new ArgumentException("商品 ID 不能为空。", nameof(productId));
+            }
+
+            var body = new Dictionary<string, object>
+            {
+                ["product_id"] = productId,
+                ["quantity"] = 1,
+                ["pay_type"] = string.IsNullOrWhiteSpace(payType) ? "wxpay" : payType,
+                ["device"] = "pc",
+            };
+
+            var response = await InvokePaymentFunctionAsync<RawCreateOrderResponse>("create-order", body);
+            if (response?.Success != true || response.Data == null)
+            {
+                throw new InvalidOperationException(response?.Error ?? response?.Message ?? "创建订单失败,请稍后重试。");
+            }
+
+            return MapPaymentOrder(response.Data);
+        }
+
+        public async Task<PaymentOrder> QueryPaymentOrderAsync(
+            string? orderId = null,
+            string? tradeNo = null,
+            bool syncHypay = false)
+        {
+            if (string.IsNullOrWhiteSpace(orderId) && string.IsNullOrWhiteSpace(tradeNo))
+            {
+                throw new ArgumentException("订单 ID 和订单号不能同时为空。");
+            }
+
+            var body = new Dictionary<string, object>
+            {
+                ["sync_hypay"] = syncHypay,
+            };
+            if (!string.IsNullOrWhiteSpace(orderId))
+            {
+                body["order_id"] = orderId;
+            }
+            if (!string.IsNullOrWhiteSpace(tradeNo))
+            {
+                body["trade_no"] = tradeNo;
+            }
+
+            var response = await InvokePaymentFunctionAsync<RawQueryOrderResponse>("query-order", body);
+            if (response?.Success != true || response.Data == null)
+            {
+                throw new InvalidOperationException(response?.Error ?? response?.Message ?? "查询订单失败,请稍后重试。");
+            }
+
+            return MapPaymentOrder(response.Data);
         }
 
         private ComicComment MapComment(RawCommentRecord record, RawProfileSummaryRecord? profile)

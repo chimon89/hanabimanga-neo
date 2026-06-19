@@ -85,7 +85,7 @@ namespace hanabimanga.ViewModels
             _document?.Profile.BannerUrl,
             "banner",
             "ic_banner_default.webp");
-        public bool IsVip => _document?.Profile.VipExpirationDate is { } expiresAt && expiresAt > DateTime.UtcNow;
+        public bool IsVip => _document?.Profile.HasActiveVip == true;
         public bool CanUploadCustomAvatar => IsVip;
         public string CustomAvatarHint => IsVip
             ? "选择 WebP 图片，最大 2 MB"

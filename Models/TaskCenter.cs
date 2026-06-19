@@ -13,6 +13,12 @@ namespace hanabimanga.Models
         public int SpentPoints { get; set; }
         public int SignInStreak { get; set; }
         public bool HasSignedInToday { get; set; }
+        public bool IsPermanentVip { get; set; }
+        public string InviteCode { get; set; } = "";
+        public int InvitedCount { get; set; }
+        public int SuccessfulInviteCount { get; set; }
+        public int PendingCheckinInviteCount { get; set; }
+        public int InvitePoints { get; set; }
         public List<TaskCenterSignInDay> SignInDays { get; set; } = new();
         public List<TaskCenterTaskItem> DailyTasks { get; set; } = new();
         public List<TaskCenterTaskItem> OneTimeTasks { get; set; } = new();
@@ -20,6 +26,7 @@ namespace hanabimanga.Models
         public List<PointTransaction> Transactions { get; set; } = new();
         public List<PointStoreItem> StoreItems { get; set; } = new();
         public List<ExchangeRecord> ExchangeRecords { get; set; } = new();
+        public List<InviteRewardRecord> InviteRecords { get; set; } = new();
 
         public int DailyCompletedCount => DailyTasks.Count(task => task.IsCompleted);
         public int OneTimeCompletedCount => OneTimeTasks.Count(task => task.IsCompleted);
@@ -88,6 +95,8 @@ namespace hanabimanga.Models
         public string Title { get; set; } = "";
         public string Description { get; set; } = "";
         public int Points { get; set; }
+        public decimal Price { get; set; }
+        public int DurationDays { get; set; }
         public int Stock { get; set; }
         public string? ImageUrl { get; set; }
         public string IconGlyph { get; set; } = "\uE7BF";
@@ -98,8 +107,10 @@ namespace hanabimanga.Models
         public bool HasImage => !string.IsNullOrWhiteSpace(ImageUrl);
         public bool CanRedeem => AvailablePoints >= Points && Points > 0;
         public string PointsText => $"{Points} 积分";
+        public string PriceText => Price > 0 ? $"¥{Price:0.##}" : PointsText;
+        public string DurationText => DurationDays > 0 ? $"{DurationDays} 天" : "";
         public string StockText => Stock > 0 ? $"剩余 {Stock}" : "";
-        public string ActionText => IsVirtual ? "兑换" : "查看详情";
+        public string ActionText => IsVirtual ? "购买" : "查看详情";
     }
 
     public sealed class ExchangeRecord
@@ -111,6 +122,17 @@ namespace hanabimanga.Models
         public string StatusText { get; set; } = "处理中";
         public string TimeText => CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         public string PointsText => $"{Points} 积分";
+    }
+
+    public sealed class InviteRewardRecord
+    {
+        public string Id { get; set; } = "";
+        public string Title { get; set; } = "邀请奖励";
+        public int Points { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string StatusText { get; set; } = "奖励已发放";
+        public string TimeText => CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        public string PointsText => Points > 0 ? $"+{Points}" : Points.ToString();
     }
 
     internal sealed class RawPointLedgerRecord

@@ -167,6 +167,7 @@ namespace hanabimanga.Pages
             try
             {
                 var appWindow = GetAppWindow(this);
+                WindowIconService.ApplyTo(this, appWindow);
                 if (appWindow.Presenter is OverlappedPresenter presenter)
                 {
                     // 去掉系统标题栏:无 caption 区域 => 用户无法拖动
